@@ -1,0 +1,378 @@
+// FaniLab Backend — Prisma schema
+//
+// This is the off-chain read model + local-account store described in
+// ARCHITECTURE.md §8. It never becomes the source of truth for fund custody
+// or delivery/escrow/dispute state transitions — those live on-chain in the
+// FaniLab-SmartContract contracts (see PHASE_1_DOMAIN_ANALYSIS.md). Rows here
+// are written by module use-cases and, for anything chain-derived, kept in
+// sync exclusively by the blockchain event indexer (see docs/EVENT_INDEXER.md).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  CUSTOMER
+  COURIER
+  FLEET_MANAGER
+  ADMIN
+
+  @@map("user_role")
+}
+
+/// Mirrors shared_types::DeliveryStatus exactly (PHASE_1_DOMAIN_ANALYSIS.md §4)
+/// so the read model never invents a state the chain doesn't have.
+enum DeliveryStatus {
+  PENDING
+  ACTIVE
+  IN_TRANSIT
+  DELIVERED
+  DISPUTED
+  CANCELLED
+
+  @@map("delivery_status")
+}
+
+/// Mirrors shared_types::CargoCategory.
+enum CargoCategory {
+  DOCUMENTS
+  ELECTRONICS
+  PERISHABLES
+  CLOTHING
+  GENERAL
+
+  @@map("cargo_category")
+}
+
+/// Mirrors shared_types::EscrowState.
+enum EscrowStatus {
+  LOCKED
+  RELEASED
+  REFUNDED
+  PAUSED
+
+  @@map("escrow_status")
+}
+
+/// Mirrors dispute_resolution_contract::DisputeStatus — the richer of the
+/// two on-chain dispute representations (PHASE_1_DOMAIN_ANALYSIS.md §5).
+enum DisputeStatus {
+  OPEN
+  RESOLVED_REFUND
+  RESOLVED_PAYOUT
+  SPLIT
+
+  @@map("dispute_status")
+}
+
+/// Mirrors fleet_management_contract::DriverFleetStatus.
+enum FleetDriverStatus {
+  PENDING
+  ACTIVE
+
+  @@map("fleet_driver_status")
+}
+
+/// Mirrors identity_reputation_contract::DriverTier.
+enum DriverTier {
+  BRONZE
+  SILVER
+  GOLD
+
+  @@map("driver_tier")
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+
+  @@map("notification_channel")
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+
+  @@map("notification_status")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Identity & Access (off-chain only — PHASE_1_DOMAIN_ANALYSIS.md §1)
+// ─────────────────────────────────────────────────────────────────────────
+
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  role            UserRole  @default(CUSTOMER)
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  wallets       WalletAddress[]
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  ownedFleets   Fleet[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+/// A Stellar address linked to a local account. A user may link more than
+/// one address (e.g. a personal wallet and a fleet treasury they control).
+model WalletAddress {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  address    String    @unique
+  isPrimary  Boolean   @default(false) @map("is_primary")
+  verifiedAt DateTime? @map("verified_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("wallet_addresses")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Deliveries & Escrow (read models mirroring delivery_contract / escrow_contract)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Delivery {
+  id                String         @id @default(uuid())
+  chainDeliveryId   BigInt         @unique @map("chain_delivery_id")
+  senderAddress     String         @map("sender_address")
+  recipientAddress  String         @map("recipient_address")
+  driverAddress     String?        @map("driver_address")
+  status            DeliveryStatus @default(PENDING)
+  origin            String
+  destination       String
+  cargoCategory     CargoCategory  @map("cargo_category")
+  weightGrams       Int            @map("weight_grams")
+  fragile           Boolean        @default(false)
+  createdAtChain    DateTime       @map("created_at_chain")
+  transitStartedAt  DateTime?      @map("transit_started_at")
+  deliveredAt       DateTime?      @map("delivered_at")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  escrow  Escrow?
+  dispute Dispute?
+
+  @@index([senderAddress])
+  @@index([recipientAddress])
+  @@index([driverAddress])
+  @@index([status])
+  @@map("deliveries")
+}
+
+model Escrow {
+  id              String       @id @default(uuid())
+  chainDeliveryId BigInt       @unique @map("chain_delivery_id")
+  token           String
+  amount          Decimal      @db.Decimal(38, 0)
+  platformFee     Decimal?     @map("platform_fee") @db.Decimal(38, 0)
+  status          EscrowStatus @default(LOCKED)
+  disputedBy      String?      @map("disputed_by")
+  disputedAt      DateTime?    @map("disputed_at")
+  releasedAt      DateTime?    @map("released_at")
+  refundedAt      DateTime?    @map("refunded_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  delivery Delivery @relation(fields: [chainDeliveryId], references: [chainDeliveryId])
+
+  @@map("escrows")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Disputes (reconciles escrow_contract + dispute_resolution_contract layers
+// per PHASE_1_DOMAIN_ANALYSIS.md §5)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Dispute {
+  id              String        @id @default(uuid())
+  chainDeliveryId BigInt        @unique @map("chain_delivery_id")
+  status          DisputeStatus @default(OPEN)
+  raisedBy        String        @map("raised_by")
+  raisedAt        DateTime      @map("raised_at")
+  resolvedBy      String?       @map("resolved_by")
+  resolvedAt      DateTime?     @map("resolved_at")
+  senderShareBps  Int?          @map("sender_share_bps")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  delivery Delivery  @relation(fields: [chainDeliveryId], references: [chainDeliveryId])
+  evidence Evidence[]
+
+  @@map("disputes")
+}
+
+/// Only the 32-byte hash is recorded on-chain (dispute_resolution_contract
+/// .add_evidence_hash); the file itself lives in object storage here, and
+/// must be verified against `hash` before being trusted (PHASE_1 §5, §12).
+model Evidence {
+  id           String   @id @default(uuid())
+  disputeId    String   @map("dispute_id")
+  hash         String
+  storageUrl   String   @map("storage_url")
+  contentType  String   @map("content_type")
+  uploadedBy   String   @map("uploaded_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId])
+  @@map("evidence")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Fleet (read model mirroring fleet_management_contract)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Fleet {
+  id              String   @id @default(uuid())
+  chainFleetId    BigInt   @unique @map("chain_fleet_id")
+  ownerId         String?  @map("owner_id")
+  ownerAddress    String   @map("owner_address")
+  treasuryAddress String   @map("treasury_address")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  owner   User?         @relation(fields: [ownerId], references: [id])
+  drivers FleetDriver[]
+
+  @@map("fleets")
+}
+
+model FleetDriver {
+  id            String            @id @default(uuid())
+  fleetId       String            @map("fleet_id")
+  driverAddress String            @map("driver_address")
+  status        FleetDriverStatus @default(PENDING)
+  invitedAt     DateTime          @default(now()) @map("invited_at")
+  acceptedAt    DateTime?         @map("accepted_at")
+  removedAt     DateTime?         @map("removed_at")
+
+  fleet Fleet @relation(fields: [fleetId], references: [id], onDelete: Cascade)
+
+  @@unique([fleetId, driverAddress])
+  @@map("fleet_drivers")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Reputation (canonical model sourced from identity_reputation_contract —
+// PHASE_1_DOMAIN_ANALYSIS.md §12 decision)
+// ─────────────────────────────────────────────────────────────────────────
+
+model DriverProfile {
+  id                        String     @id @default(uuid())
+  address                   String     @unique
+  reputationScore           Int        @default(50) @map("reputation_score")
+  tier                      DriverTier @default(BRONZE)
+  kycVerified               Boolean    @default(false) @map("kyc_verified")
+  deliveriesCompleted       Int        @default(0) @map("deliveries_completed")
+  /// Secondary, non-authoritative counter mirrored from delivery_contract's
+  /// own local DriverProfile — surfaced for transparency only, never used
+  /// for ranking/eligibility decisions (PHASE_1_DOMAIN_ANALYSIS.md §4, §12).
+  legacyDeliveriesCompleted Int        @default(0) @map("legacy_deliveries_completed")
+  registeredAt              DateTime   @map("registered_at")
+  updatedAt                 DateTime   @updatedAt @map("updated_at")
+
+  @@map("driver_profiles")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Blockchain indexer (checkpointing + idempotent event log — ARCHITECTURE.md §6)
+// ─────────────────────────────────────────────────────────────────────────
+
+model BlockchainCheckpoint {
+  id            String   @id @default(uuid())
+  contractName  String   @map("contract_name")
+  network       String
+  lastLedgerSeq BigInt   @default(0) @map("last_ledger_seq")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([contractName, network])
+  @@map("blockchain_checkpoints")
+}
+
+model BlockchainEvent {
+  id           String    @id @default(uuid())
+  contractName String    @map("contract_name")
+  network      String
+  ledgerSeq    BigInt    @map("ledger_seq")
+  txHash       String    @map("tx_hash")
+  eventIndex   Int       @map("event_index")
+  topic        String
+  payload      Json
+  ingestedAt   DateTime  @default(now()) @map("ingested_at")
+  processedAt  DateTime? @map("processed_at")
+
+  @@unique([contractName, txHash, eventIndex])
+  @@index([contractName, ledgerSeq])
+  @@map("blockchain_events")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Notifications & Audit (cross-cutting)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String              @id @default(uuid())
+  userId    String              @map("user_id")
+  channel   NotificationChannel
+  type      String
+  payload   Json
+  status    NotificationStatus  @default(PENDING)
+  sentAt    DateTime?           @map("sent_at")
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?  @map("actor_id")
+  actorLabel String   @map("actor_label")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@map("audit_logs")
+}

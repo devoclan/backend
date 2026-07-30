@@ -1,0 +1,18 @@
+# Update the handles/team below once the repository is transferred to the
+# FaniLab GitHub organization. Until then this is a placeholder so the file's
+# structure (and CI's expectation that it exists) is in place from day one.
+
+*                               @fanilab/maintainers
+
+/src/modules/auth/              @fanilab/maintainers
+/src/modules/users/             @fanilab/maintainers
+/src/modules/deliveries/        @fanilab/maintainers
+/src/modules/escrow/            @fanilab/maintainers
+/src/modules/fleet/             @fanilab/maintainers
+/src/modules/disputes/          @fanilab/maintainers
+/src/modules/reputation/        @fanilab/maintainers
+/src/modules/indexer/           @fanilab/maintainers
+/src/blockchain/                @fanilab/maintainers
+/prisma/                        @fanilab/maintainers
+/.github/                       @fanilab/maintainers
+/docs/SECURITY.md               @fanilab/maintainers
