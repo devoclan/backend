@@ -48,13 +48,23 @@ All `/api/v1/transactions/build/*` routes require authentication (anti-abuse —
 
 **Encoding caveat**: `create-delivery`'s request body is encoded into `delivery_contract`'s `DeliveryMetadata`/`CargoDescriptor` Soroban struct types following the documented `#[contracttype]` conventions (see `src/modules/deliveries/infrastructure/delivery-scval-mapping.ts`), verified by construction and by round-tripping through this repo's own decoder — but not yet against a live deployed `delivery_contract`, since none is deployed anywhere reachable from this repository's environment. Treat this as the first thing to verify once a real testnet deployment exists.
 
+| `GET` | `/api/v1/escrow/:chainDeliveryId` | Get one escrow by its on-chain delivery id (`404` if not yet indexed) |
+| `POST` | `/api/v1/transactions/build/create-escrow` | Unsigned XDR for `escrow_contract.create_escrow` — `{ senderAddress, recipientAddress, driverAddress, chainDeliveryId, token, amount }`; caller/source is the sender |
+| `POST` | `/api/v1/transactions/build/release-escrow` | Unsigned XDR for `release_escrow` — `{ callerAddress, chainDeliveryId }`; caller must be the recipient or admin (enforced on-chain, not re-checked here) |
+| `POST` | `/api/v1/transactions/build/refund-escrow` | Unsigned XDR for `refund_escrow` — `{ callerAddress, chainDeliveryId }`; caller must be the sender or admin |
+
+Same auth/config-fallback rules as deliveries: all three build endpoints require authentication, and return `502 BLOCKCHAIN_ERROR` if `ESCROW_CONTRACT_ID` isn't configured. `raise_dispute`/`resolve_dispute` are deliberately **not** exposed here — they belong to the future `disputes` module (`ARCHITECTURE.md` §4), which owns the full two-layer dispute/arbitration flow.
+
+**Encoding caveat**: same as deliveries above — `escrow-scval-mapping.ts` encodes/decodes `escrow_contract`'s `EscrowRecord`/`EscrowState` types by construction and round-trip only, not yet against a live deployment. One escrow-specific note: `delivery_id` is a **bare `u64`** argument for every `escrow_contract` call, unlike `delivery_contract`'s tuple-wrapped `DeliveryId` — verified directly against `escrow_contract/lib.rs`.
+
+**Read-model gaps** (see `EVENT_INDEXER.md` for the full event-to-state mapping): `platformFee` is `null` until an escrow reaches `RELEASED` (it's only known from the `escrow_released` event payload — a `dispute_resolved`-driven release doesn't carry it, so it stays `null` in that path); `dispute_resolved` events are ambiguous about outcome (both the release and refund branches emit the identical event), so the indexer resolves the actual status via a supplementary `get_escrow` read call rather than guessing from the event alone.
+
 Everything else below is the **planned surface**, matching the module boundaries in `ARCHITECTURE.md` §4 — it will be filled in endpoint-by-endpoint as each module ships in Phase 5, not written speculatively ahead of the code that implements it.
 
 ## Planned Endpoint Families
 
 | Module | Example routes |
 |---|---|
-| `escrow` | `GET /escrow/:deliveryId`, `POST /transactions/build/create-escrow`, `POST /transactions/build/release-escrow`, `POST /transactions/build/refund-escrow` |
 | `fleet` | `GET /fleets/:id`, `GET /fleets/:id/payout-address`, `POST /transactions/build/register-fleet`, `POST /transactions/build/add-driver-to-fleet`, `POST /transactions/build/accept-fleet-invite` |
 | `disputes` | `GET /disputes/:deliveryId`, `POST /disputes/:deliveryId/evidence`, `POST /transactions/build/raise-dispute` |
 | `reputation` | `GET /drivers/:address/reputation` |

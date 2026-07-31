@@ -75,7 +75,8 @@ Each module, before moving to the next, must ship with:
 | `users` | ✅ Done — profile read, wallet linking (challenge/signature via real Stellar ed25519 verification), wallet list/unlink, RBAC-ready |
 | `indexer` | ✅ Done (minimal scope: `escrow_contract` + `delivery_contract` only, see `EVENT_INDEXER.md`) — checkpointed idempotent polling, generic ScVal XDR decoder, BullMQ repeatable job + worker, `GET /health/indexer`, verified against real Postgres and the real public testnet RPC |
 | `deliveries` | ✅ Done — read model synced from indexed events (with a supplementary `get_delivery` read call to hydrate the sparse `delivery_created` event), unsigned-XDR builders for all six `delivery_contract` calls, real ScVal struct/enum encoding verified by construction + round-trip (not yet against a live deployment — see `EVENT_INDEXER.md`) |
-| `escrow`, `fleet`, `disputes`, `reputation` | Pending |
+| `escrow` | ✅ Done — read model synced from indexed events (delivery id read from the event *topic*, not the payload — verified against `escrow_contract`'s distinct convention; `dispute_resolved`'s release/refund ambiguity resolved via a supplementary `get_escrow` read call), unsigned-XDR builders for `create_escrow`/`release_escrow`/`refund_escrow` (dispute-resolution calls deliberately deferred to the future `disputes` module), real ScVal struct/enum encoding verified by construction + round-trip |
+| `fleet`, `disputes`, `reputation` | Pending |
 | `notifications`, `analytics`, `fraud-detection`, `admin` | Pending |
 
 ## 6. Milestones & Deliverables
@@ -167,4 +168,4 @@ Each module, before moving to the next, must ship with:
 
 ---
 
-**Current status:** Phase 5 in progress. `auth`, `users`, `indexer` (minimal scope), and `deliveries` modules complete. Next: `escrow`.
+**Current status:** Phase 5 in progress. `auth`, `users`, `indexer` (minimal scope), `deliveries`, and `escrow` modules complete. Next: `fleet`.

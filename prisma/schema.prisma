@@ -194,14 +194,25 @@ model Delivery {
 model Escrow {
   id              String       @id @default(uuid())
   chainDeliveryId BigInt       @unique @map("chain_delivery_id")
+  /// escrow_contract's own EscrowRecord carries its own sender/recipient/
+  /// driver, independent of delivery_contract's record — create_escrow's
+  /// caller supplies these directly, so they are not assumed to always
+  /// match the related Delivery row (PHASE_1_DOMAIN_ANALYSIS.md §3).
+  senderAddress    String    @map("sender_address")
+  recipientAddress String    @map("recipient_address")
+  driverAddress    String    @map("driver_address")
   token           String
-  amount          Decimal      @db.Decimal(38, 0)
-  platformFee     Decimal?     @map("platform_fee") @db.Decimal(38, 0)
+  /// Decimal(39, 0): i128::MAX (170141183460469231731687303715884105727) has
+  /// 39 digits — Decimal(38, 0) tops out at 38 nines, one digit short of the
+  /// full i128 range, so it must be 39 here to store any valid i128 exactly.
+  amount          Decimal      @db.Decimal(39, 0)
+  platformFee     Decimal?     @map("platform_fee") @db.Decimal(39, 0)
   status          EscrowStatus @default(LOCKED)
   disputedBy      String?      @map("disputed_by")
   disputedAt      DateTime?    @map("disputed_at")
   releasedAt      DateTime?    @map("released_at")
   refundedAt      DateTime?    @map("refunded_at")
+  createdAtChain  DateTime     @map("created_at_chain")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 

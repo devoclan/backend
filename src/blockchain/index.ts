@@ -10,6 +10,7 @@ export {
   addressToScVal,
   u32ToScVal,
   u64ToScVal,
+  i128ToScVal,
   boolToScVal,
   stringToScVal,
   symbolToScVal,

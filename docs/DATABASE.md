@@ -31,4 +31,4 @@ Migrations are committed to `prisma/migrations/` and reviewed like any other cod
 
 ## Money/Amounts
 
-`escrows.amount` and `.platform_fee` are `Decimal(38, 0)` — large enough to hold a Soroban `i128` value exactly as an integer (the token's smallest unit / stroops-equivalent), never a floating-point representation. Display formatting (applying decimals for a given asset) happens in the application layer, not the database.
+`escrows.amount` and `.platform_fee` are `Decimal(39, 0)` — exactly large enough to hold any Soroban `i128` value as an integer (`i128::MAX` has 39 digits; `Decimal(38, 0)` is one digit short), never a floating-point representation. Display formatting (applying decimals for a given asset) happens in the application layer, not the database.

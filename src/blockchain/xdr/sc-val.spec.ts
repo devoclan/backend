@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addressToScVal,
   boolToScVal,
+  i128ToScVal,
   namedStructToScVal,
   scValToNative,
   stringToScVal,
@@ -85,6 +86,13 @@ describe('native -> ScVal encoders', () => {
     expect(scValToNative(stringToScVal('hello'))).toBe('hello');
     expect(scValToNative(symbolToScVal('escrow_funded'))).toBe('escrow_funded');
     expect(scValToNative(u64ToScVal(9007199254740993n))).toBe('9007199254740993');
+  });
+
+  it('round-trips i128 values, including ones larger than 64 bits and negative ones', () => {
+    expect(scValToNative(i128ToScVal(500n))).toBe('500');
+    expect(scValToNative(i128ToScVal(2n ** 100n))).toBe((2n ** 100n).toString());
+    expect(scValToNative(i128ToScVal(-1n))).toBe('-1');
+    expect(scValToNative(i128ToScVal(-(2n ** 100n)))).toBe((-(2n ** 100n)).toString());
   });
 
   it('round-trips a real Stellar address', () => {
