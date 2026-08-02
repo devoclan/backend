@@ -16,16 +16,18 @@ import {
 import { createIndexerHealthRoutes } from './interface/routes.js';
 
 /**
- * Minimal indexer scope for this phase (ROADMAP.md §5): escrow + delivery
- * contracts only, enough to unblock the `deliveries` and `escrow` modules
- * next. The remaining four contracts are added here when their consuming
- * modules (fleet, disputes, reputation) are implemented — not before.
+ * Indexer scope grows one module at a time (ROADMAP.md §5): escrow +
+ * delivery + fleet contracts now that all three have consuming modules. The
+ * remaining contracts (dispute_resolution, identity_reputation) are added
+ * here when their consuming modules (disputes, reputation) are implemented
+ * — not before.
  */
 function getTrackedContracts(): TrackedContractConfig[] {
   const config = getConfig();
   return [
     { contractName: 'escrow', contractId: config.ESCROW_CONTRACT_ID },
     { contractName: 'delivery', contractId: config.DELIVERY_CONTRACT_ID },
+    { contractName: 'fleet', contractId: config.FLEET_MANAGEMENT_CONTRACT_ID },
   ];
 }
 

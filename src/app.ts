@@ -13,6 +13,7 @@ import { createUsersModule } from './modules/users/index.js';
 import { createIndexerHealthPlugin } from './modules/indexer/index.js';
 import { createDeliveriesModule } from './modules/deliveries/index.js';
 import { createEscrowModule } from './modules/escrow/index.js';
+import { createFleetModule } from './modules/fleet/index.js';
 
 /**
  * Composes the Fastify instance with no side effects (no `listen()` call) so
@@ -24,9 +25,8 @@ import { createEscrowModule } from './modules/escrow/index.js';
  * per-instance Fastify flag.
  *
  * Module route registration is added here incrementally as each module
- * ships in Phase 5 — fleet/disputes/reputation/etc. are not registered yet,
- * and intentionally so, rather than pre-wired ahead of their
- * implementation.
+ * ships in Phase 5 — disputes/reputation/etc. are not registered yet, and
+ * intentionally so, rather than pre-wired ahead of their implementation.
  */
 export async function buildApp() {
   const app = Fastify({
@@ -48,6 +48,7 @@ export async function buildApp() {
   await app.register(createIndexerHealthPlugin(prisma));
   await app.register(createDeliveriesModule(prisma), { prefix: '/api/v1' });
   await app.register(createEscrowModule(prisma), { prefix: '/api/v1' });
+  await app.register(createFleetModule(prisma), { prefix: '/api/v1' });
 
   return app;
 }

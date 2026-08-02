@@ -73,10 +73,11 @@ Each module, before moving to the next, must ship with:
 | `shared` / `blockchain` foundations | ✅ Done (Phase 4) |
 | `auth` | ✅ Done — register/login/refresh/logout/verify-email/password-reset, RBAC guard, 42 passing unit/infra tests + skip-gated Prisma/API integration tests |
 | `users` | ✅ Done — profile read, wallet linking (challenge/signature via real Stellar ed25519 verification), wallet list/unlink, RBAC-ready |
-| `indexer` | ✅ Done (minimal scope: `escrow_contract` + `delivery_contract` only, see `EVENT_INDEXER.md`) — checkpointed idempotent polling, generic ScVal XDR decoder, BullMQ repeatable job + worker, `GET /health/indexer`, verified against real Postgres and the real public testnet RPC |
+| `indexer` | ✅ Done (scope now `escrow_contract` + `delivery_contract` + `fleet_management_contract`, see `EVENT_INDEXER.md`) — checkpointed idempotent polling, generic ScVal XDR decoder, BullMQ repeatable job + worker, `GET /health/indexer`, verified against real Postgres and the real public testnet RPC |
 | `deliveries` | ✅ Done — read model synced from indexed events (with a supplementary `get_delivery` read call to hydrate the sparse `delivery_created` event), unsigned-XDR builders for all six `delivery_contract` calls, real ScVal struct/enum encoding verified by construction + round-trip (not yet against a live deployment — see `EVENT_INDEXER.md`) |
 | `escrow` | ✅ Done — read model synced from indexed events (delivery id read from the event *topic*, not the payload — verified against `escrow_contract`'s distinct convention; `dispute_resolved`'s release/refund ambiguity resolved via a supplementary `get_escrow` read call), unsigned-XDR builders for `create_escrow`/`release_escrow`/`refund_escrow` (dispute-resolution calls deliberately deferred to the future `disputes` module), real ScVal struct/enum encoding verified by construction + round-trip |
-| `fleet`, `disputes`, `reputation` | Pending |
+| `fleet` | ✅ Done — read model synced from indexed events (every `fleet_management_contract` event carries everything needed directly, unlike escrow/deliveries — no supplementary read call required for sync), unsigned-XDR builders for all five mutating calls (`register_fleet`/`update_fleet_treasury`/`add_driver_to_fleet`/`accept_fleet_invite`/`remove_driver_from_fleet`), plus a live `get_payout_address` read (a derived on-chain view with no corresponding event); `fleet_id` verified as a bare `u64`, no tuple-struct wrapping |
+| `disputes`, `reputation` | Pending |
 | `notifications`, `analytics`, `fraud-detection`, `admin` | Pending |
 
 ## 6. Milestones & Deliverables
@@ -168,4 +169,4 @@ Each module, before moving to the next, must ship with:
 
 ---
 
-**Current status:** Phase 5 in progress. `auth`, `users`, `indexer` (minimal scope), `deliveries`, and `escrow` modules complete. Next: `fleet`.
+**Current status:** Phase 5 in progress. `auth`, `users`, `indexer` (escrow + delivery + fleet scope), `deliveries`, `escrow`, and `fleet` modules complete. Next: `disputes`.
