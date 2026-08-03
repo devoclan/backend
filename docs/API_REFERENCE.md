@@ -82,13 +82,22 @@ Same auth/config-fallback rules as escrow/deliveries: every `/transactions/build
 
 **Read-model gaps** (see `EVENT_INDEXER.md` for the full event-to-state mapping): `senderShareBps` is always `null` — `dispute_resolved_split`'s event payload is just `(caller, delivery_id)` and the on-chain `DisputeCase` itself has no such field, so this backend has no source to sync it from. A dispute raised and resolved purely through `escrow_contract`'s Layer A (never touching `dispute_resolution_contract`) stays `OPEN` in this read model indefinitely — `escrow_contract.dispute_resolved` is ambiguous by itself (same fact the `escrow` module's own docs note) and this module has no fallback read to disambiguate it, unlike `escrow`'s own handler. Evidence `confirmedOnChain` is `false` for every item whenever no on-chain `DisputeCase` exists at all (same Layer-A-only scenario) — not an error, just nothing to confirm against.
 
+| `GET` | `/api/v1/drivers/:address/reputation` | Get one driver's canonical reputation profile — `reputationScore`, `tier` (`BRONZE`/`SILVER`/`GOLD`, derived from score), `kycVerified`, `deliveriesCompleted`, plus `legacyDeliveriesCompleted` (a clearly-labeled secondary/informational counter, see below). `404` if the driver has never called `register_driver` |
+| `POST` | `/api/v1/transactions/build/register-driver` | Unsigned XDR for `identity_reputation_contract.register_driver` — `{ driverAddress }`, driver self-registers |
+| `POST` | `/api/v1/transactions/build/update-driver-kyc-status` | Unsigned XDR for `update_driver_kyc_status` — admin only, `{ adminAddress, driverAddress, kycVerified }` |
+
+`increase_reputation`/`decrease_reputation` have no build endpoint at all — both require the on-chain *caller* to be the wired `delivery_contract`/`dispute_resolution_contract` address itself (`PHASE_1_DOMAIN_ANALYSIS.md` §7), not a wallet-signed transaction any user or admin could build; they're indexer-only concerns. `register_user` is similarly excluded — this module's schema (frozen in Phase 4) has a read model for driver reputation only, not the on-chain `UserProfile` that call creates.
+
+**Two reputation ledgers, deliberately not conflated** (`PHASE_1_DOMAIN_ANALYSIS.md` §4/§12): `reputationScore`/`tier`/`deliveriesCompleted` are sourced exclusively from `identity_reputation_contract` — the canonical ledger. `legacyDeliveriesCompleted` is `delivery_contract`'s own, entirely separate `DriverProfile.deliveries_completed` counter, refreshed opportunistically (via a supplementary read, alongside every canonical-profile refresh) purely for transparency/debugging — **never** used for tier/ranking/eligibility decisions, and can lag behind actual delivery confirmations since `delivery_contract` doesn't emit a dedicated event for it.
+
+**Encoding caveat**: same as escrow/deliveries/disputes above — `reputation-scval-mapping.ts` encodes/decodes `identity_reputation_contract`'s `DriverProfile` type by construction and round-trip only, not yet against a live deployment.
+
 Everything else below is the **planned surface**, matching the module boundaries in `ARCHITECTURE.md` §4 — it will be filled in endpoint-by-endpoint as each module ships in Phase 5, not written speculatively ahead of the code that implements it.
 
 ## Planned Endpoint Families
 
 | Module | Example routes |
 |---|---|
-| `reputation` | `GET /drivers/:address/reputation` |
 | `analytics` | `GET /analytics/gmv`, `GET /analytics/completion-rate`, `GET /analytics/dispute-rate` |
 | `admin` | `POST /admin/disputes/:deliveryId/resolve`, `POST /admin/users/:id/role`, `GET /admin/audit-log` |
 | — | `POST /transactions/submit` (relay a signed XDR envelope, track confirmation) |
