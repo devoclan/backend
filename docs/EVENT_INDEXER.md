@@ -49,7 +49,7 @@ A handler that fails to parse an event logs and records the failure (not silentl
 
 ## Current Scope
 
-Implemented for **`escrow_contract` and `delivery_contract` only** — the minimal slice needed to unblock the `deliveries` and `escrow` modules next (`ROADMAP.md` §5). The polling engine (`createPollContractEventsUseCase`) is fully contract-agnostic; adding `dispute_resolution_contract`, `fleet_management_contract`, `identity_reputation_contract`, and `settlement_contract` later is a matter of adding entries to `getTrackedContracts()` in `src/modules/indexer/index.ts`, not new architecture.
+Implemented for **`escrow_contract`, `delivery_contract`, `fleet_management_contract`, and `dispute_resolution_contract`** — everything needed to unblock the `deliveries`, `escrow`, `fleet`, and `disputes` modules (`ROADMAP.md` §5). `identity_reputation_contract` and `settlement_contract` remain untracked until the `reputation` module (and, per `PHASE_1_DOMAIN_ANALYSIS.md` §8, an actually-implemented settlement contract) exist. The polling engine (`createPollContractEventsUseCase`) is fully contract-agnostic; adding a contract later is a matter of adding an entry to `getTrackedContracts()` in `src/modules/indexer/index.ts`, not new architecture.
 
 The `deliveries` module was the first real subscriber on the event bus (`src/modules/deliveries/infrastructure/event-subscription.ts`), reacting to `delivery_created`/`driver_assigned`/`DeliveryInTransit`/`delivery_confirmed`/`delivery_cancelled`/`delivery_disputed` and filtering out every other contract's events on the same channel.
 
@@ -60,7 +60,18 @@ The `deliveries` module was the first real subscriber on the event bus (`src/mod
 - **`escrow_funded`'s payload doesn't carry `driver`/`token`** either, so that handler also hydrates the full record via `get_escrow` rather than trying to piece it together from the event alone.
 - **`platformFee` is only known from `escrow_released`'s payload** (`(driver, payout, fee)`) — a release reached via `dispute_resolved` doesn't carry it, so `platformFee` stays `null` for that path. This is a real read-model gap, documented rather than papered over with a guess.
 
-No FaniLab contracts are deployed anywhere reachable from this repository's own environment, so `ESCROW_CONTRACT_ID`/`DELIVERY_CONTRACT_ID` are blank by default (`.env.example`) and the indexer simply skips scheduling for whichever contracts aren't configured, logging a warning rather than failing.
+`fleet` is the third subscriber (`src/modules/fleet/infrastructure/event-subscription.ts`/`sync-fleet-from-event.ts`), reacting to `fleet_registered`, `fleet_treasury_updated`, `driver_invited`, `invite_accepted`, and `driver_removed`. Unlike `escrow_contract`, `fleet_management_contract` puts `fleet_id` in the payload's first element (single-segment topic), same convention as `delivery_contract` — verified directly against `fleet_management_contract/lib.rs`. No event here has a sparse payload needing a supplementary read call.
+
+`disputes` is the fourth subscriber (`src/modules/disputes/infrastructure/event-subscription.ts`/`sync-dispute-from-event.ts`), and the first one to subscribe to **two** contracts' events for one read model, per `PHASE_1_DOMAIN_ANALYSIS.md` §5's "two dispute layers" finding:
+
+- From `dispute_resolution_contract` (contractName `dispute-resolution`): `dispute_raised`, `dispute_resolved_refund`, `dispute_resolved_split`, `dispute_resolved_payout`. `evidence_added` is deliberately a no-op in the sync path — evidence rows are written by the `uploadEvidence` use case at upload time and cross-checked against the chain's `evidence_hashes` at read time instead (see `API_REFERENCE.md`'s disputes section).
+- From `escrow_contract` (contractName `escrow`): `delivery_disputed` only. `escrow_contract.dispute_resolved` is intentionally **not** handled here — both of `resolve_dispute`'s branches (and `resolve_dispute_split`) emit that identical, ambiguous event, and unlike `escrow`'s own handler this one has no `get_escrow`-style fallback to disambiguate it; the dispute-resolution-contract-specific events above are the authoritative signal for status.
+- **`delivery_id` is the tuple-wrapped `DeliveryId` struct for every `dispute_resolution_contract` event**, not the bare `u64` `escrow_contract` uses — verified directly against `dispute_resolution_contract/lib.rs`. Since `BlockchainEventEnvelope.topic` is always `string[]` (see below), this arrives as the JSON string `'["1"]'`, not a native array.
+- **Known read-model gap**: a dispute raised *and* resolved purely through `escrow_contract`'s Layer A, without ever touching `dispute_resolution_contract`, stays `OPEN` in this read model indefinitely — there is no on-chain signal this backend can use to learn the actual outcome in that scenario. Documented here rather than guessed at.
+
+Topic segments are always decoded then re-stringified to plain `string[]` (`soroban-event-source.ts`'s `stringifyTopicSegment`, `JSON.stringify`-ing anything that isn't already a string) before an event reaches any handler — this is why a tuple-wrapped id in the topic (as above) round-trips as a JSON string rather than a native array, while the same value in the event *payload* (`unknown`, never stringified) stays a native array/object.
+
+No FaniLab contracts are deployed anywhere reachable from this repository's own environment, so every `*_CONTRACT_ID` variable is blank by default (`.env.example`) and the indexer simply skips scheduling for whichever contracts aren't configured, logging a warning rather than failing.
 
 ## Status
 

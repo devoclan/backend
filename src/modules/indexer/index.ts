@@ -17,10 +17,9 @@ import { createIndexerHealthRoutes } from './interface/routes.js';
 
 /**
  * Indexer scope grows one module at a time (ROADMAP.md §5): escrow +
- * delivery + fleet contracts now that all three have consuming modules. The
- * remaining contracts (dispute_resolution, identity_reputation) are added
- * here when their consuming modules (disputes, reputation) are implemented
- * — not before.
+ * delivery + fleet + dispute-resolution contracts now that all four have
+ * consuming modules. The remaining contract (identity_reputation) is added
+ * here when its consuming module (reputation) is implemented — not before.
  */
 function getTrackedContracts(): TrackedContractConfig[] {
   const config = getConfig();
@@ -28,6 +27,7 @@ function getTrackedContracts(): TrackedContractConfig[] {
     { contractName: 'escrow', contractId: config.ESCROW_CONTRACT_ID },
     { contractName: 'delivery', contractId: config.DELIVERY_CONTRACT_ID },
     { contractName: 'fleet', contractId: config.FLEET_MANAGEMENT_CONTRACT_ID },
+    { contractName: 'dispute-resolution', contractId: config.DISPUTE_RESOLUTION_CONTRACT_ID },
   ];
 }
 

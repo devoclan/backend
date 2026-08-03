@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addressToScVal,
   boolToScVal,
+  bytesToScVal,
   i128ToScVal,
   namedStructToScVal,
   scValToNative,
@@ -98,6 +99,14 @@ describe('native -> ScVal encoders', () => {
   it('round-trips a real Stellar address', () => {
     const keypair = Keypair.random();
     expect(scValToNative(addressToScVal(keypair.publicKey()))).toBe(keypair.publicKey());
+  });
+
+  it('encodes a 32-byte hash from hex (BytesN<32>, e.g. dispute evidence hashes)', () => {
+    const hex = 'a'.repeat(64); // 32 bytes
+    const scVal = bytesToScVal(hex);
+
+    expect(scVal.switch().name).toBe('scvBytes');
+    expect(scValToNative(scVal)).toBe(Buffer.from(hex, 'hex').toString('base64'));
   });
 
   it('encodes a tuple/newtype struct as a one-element Vec', () => {

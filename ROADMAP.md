@@ -77,7 +77,8 @@ Each module, before moving to the next, must ship with:
 | `deliveries` | ✅ Done — read model synced from indexed events (with a supplementary `get_delivery` read call to hydrate the sparse `delivery_created` event), unsigned-XDR builders for all six `delivery_contract` calls, real ScVal struct/enum encoding verified by construction + round-trip (not yet against a live deployment — see `EVENT_INDEXER.md`) |
 | `escrow` | ✅ Done — read model synced from indexed events (delivery id read from the event *topic*, not the payload — verified against `escrow_contract`'s distinct convention; `dispute_resolved`'s release/refund ambiguity resolved via a supplementary `get_escrow` read call), unsigned-XDR builders for `create_escrow`/`release_escrow`/`refund_escrow` (dispute-resolution calls deliberately deferred to the future `disputes` module), real ScVal struct/enum encoding verified by construction + round-trip |
 | `fleet` | ✅ Done — read model synced from indexed events (every `fleet_management_contract` event carries everything needed directly, unlike escrow/deliveries — no supplementary read call required for sync), unsigned-XDR builders for all five mutating calls (`register_fleet`/`update_fleet_treasury`/`add_driver_to_fleet`/`accept_fleet_invite`/`remove_driver_from_fleet`), plus a live `get_payout_address` read (a derived on-chain view with no corresponding event); `fleet_id` verified as a bare `u64`, no tuple-struct wrapping |
-| `disputes`, `reputation` | Pending |
+| `disputes` | ✅ Done — read model reconciling **both** on-chain dispute layers (`dispute_resolution_contract`'s five events plus `escrow_contract`'s `delivery_disputed`) into one `Dispute` row per delivery (Phase 1 §5); unsigned-XDR builders for all five `dispute_resolution_contract` mutating calls; evidence upload (local-filesystem storage for v1, sha256 content hash) plus read-time cross-verification of each stored hash against a live `get_dispute` call. `delivery_id` verified as the tuple-wrapped `DeliveryId` struct, unlike `escrow_contract`'s bare `u64`. Documented gaps: `senderShareBps` is never observable from any on-chain event, and a dispute resolved purely through `escrow_contract`'s Layer A (bypassing `dispute_resolution_contract` entirely) stays `OPEN` in this read model — see `EVENT_INDEXER.md` |
+| `reputation` | Pending |
 | `notifications`, `analytics`, `fraud-detection`, `admin` | Pending |
 
 ## 6. Milestones & Deliverables
@@ -169,4 +170,4 @@ Each module, before moving to the next, must ship with:
 
 ---
 
-**Current status:** Phase 5 in progress. `auth`, `users`, `indexer` (escrow + delivery + fleet scope), `deliveries`, `escrow`, and `fleet` modules complete. Next: `disputes`.
+**Current status:** Phase 5 in progress. `auth`, `users`, `indexer` (escrow + delivery + fleet + dispute-resolution scope), `deliveries`, `escrow`, `fleet`, and `disputes` modules complete. Next: `reputation`.

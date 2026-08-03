@@ -38,6 +38,10 @@ const envSchema = z.object({
 
   INDEXER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
   INDEXER_LAG_ALERT_LEDGERS: z.coerce.number().int().positive().default(50),
+
+  /** Local-filesystem root for dispute evidence files — see
+   * src/modules/disputes/infrastructure/local-evidence-storage.ts. */
+  EVIDENCE_STORAGE_DIR: z.string().default('./storage/evidence'),
 });
 
 export type Env = z.infer<typeof envSchema>;

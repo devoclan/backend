@@ -12,6 +12,7 @@ export {
   u64ToScVal,
   i128ToScVal,
   boolToScVal,
+  bytesToScVal,
   stringToScVal,
   symbolToScVal,
   tupleStructToScVal,

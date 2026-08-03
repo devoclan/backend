@@ -128,6 +128,12 @@ export function boolToScVal(value: boolean): xdr.ScVal {
   return xdr.ScVal.scvBool(value);
 }
 
+/** Encodes a fixed-size byte array (e.g. `BytesN<32>`, used for
+ * `dispute_resolution_contract.add_evidence_hash`) from a hex string. */
+export function bytesToScVal(hex: string): xdr.ScVal {
+  return xdr.ScVal.scvBytes(Buffer.from(hex, 'hex'));
+}
+
 export function stringToScVal(value: string): xdr.ScVal {
   return xdr.ScVal.scvString(value);
 }

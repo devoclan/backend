@@ -59,14 +59,35 @@ Same auth/config-fallback rules as deliveries: all three build endpoints require
 
 **Read-model gaps** (see `EVENT_INDEXER.md` for the full event-to-state mapping): `platformFee` is `null` until an escrow reaches `RELEASED` (it's only known from the `escrow_released` event payload — a `dispute_resolved`-driven release doesn't carry it, so it stays `null` in that path); `dispute_resolved` events are ambiguous about outcome (both the release and refund branches emit the identical event), so the indexer resolves the actual status via a supplementary `get_escrow` read call rather than guessing from the event alone.
 
+| `GET` | `/api/v1/fleets/:chainFleetId` | Get one fleet (with its drivers) by its on-chain id (`404` if not yet indexed) |
+| `GET` | `/api/v1/fleets/:chainFleetId/payout-address/:driverAddress` | Live `get_payout_address` read — resolves to the fleet treasury if the driver is `ACTIVE` in that fleet, else the driver's own address. A pre-transaction convenience only; `escrow_contract` never calls this itself (`PHASE_1_DOMAIN_ANALYSIS.md` §6) |
+| `POST` | `/api/v1/transactions/build/register-fleet` | Unsigned XDR for `register_fleet` — `{ ownerAddress, treasuryAddress }` |
+| `POST` | `/api/v1/transactions/build/update-fleet-treasury` | Unsigned XDR for `update_fleet_treasury` — owner only |
+| `POST` | `/api/v1/transactions/build/add-driver-to-fleet` | Unsigned XDR for `add_driver_to_fleet` — owner only |
+| `POST` | `/api/v1/transactions/build/accept-fleet-invite` | Unsigned XDR for `accept_fleet_invite` — the invited driver |
+| `POST` | `/api/v1/transactions/build/remove-driver-from-fleet` | Unsigned XDR for `remove_driver_from_fleet` — owner or the driver themself |
+
+| `GET` | `/api/v1/disputes/:chainDeliveryId` | Get one dispute (with its evidence list) by its on-chain delivery id (`404` if not yet indexed). Each evidence item's `confirmedOnChain` flag is computed at read time against a live `get_dispute` call — see the Read-model gaps note below |
+| `POST` | `/api/v1/disputes/:chainDeliveryId/evidence` | Upload an evidence file — `{ uploadedBy, contentType, base64Content }`. Stores the file, computes and returns its sha256 hex hash; the client must then submit that exact hash via `add-evidence-hash` for it to be recorded on-chain. Only while the dispute is `OPEN` (`409 CONFLICT` otherwise, mirroring `add_evidence_hash`'s on-chain guard) |
+| `GET` | `/api/v1/disputes/evidence/:evidenceId/download` | Streams back a previously uploaded evidence file with its original content type |
+| `POST` | `/api/v1/transactions/build/raise-dispute` | Unsigned XDR for `dispute_resolution_contract.raise_dispute` — sender or recipient |
+| `POST` | `/api/v1/transactions/build/add-evidence-hash` | Unsigned XDR for `add_evidence_hash` — sender or recipient, `evidenceHash` must be a 32-byte hex string |
+| `POST` | `/api/v1/transactions/build/resolve-dispute-refund-sender` | Unsigned XDR for `resolve_dispute_refund_sender` — admin only |
+| `POST` | `/api/v1/transactions/build/resolve-dispute-pay-driver` | Unsigned XDR for `resolve_dispute_pay_driver` — admin only |
+| `POST` | `/api/v1/transactions/build/resolve-dispute-split-funds` | Unsigned XDR for `resolve_dispute_split_funds` — admin only, `{ senderShareBps }` (0–10000) |
+
+Same auth/config-fallback rules as escrow/deliveries: every `/transactions/build/*` and evidence-upload/download endpoint requires authentication, and the build endpoints return `502 BLOCKCHAIN_ERROR` if `DISPUTE_RESOLUTION_CONTRACT_ID` isn't configured. `escrow_contract`'s own `raise_dispute`/`resolve_dispute`/`resolve_dispute_split` (Layer A) are deliberately **not** exposed anywhere in this API — this module owns the full two-layer flow (`PHASE_1_DOMAIN_ANALYSIS.md` §5), and the `escrow` module's own endpoints intentionally omit them.
+
+**Encoding caveat**: same as escrow/deliveries above — `disputes-scval-mapping.ts` encodes/decodes `dispute_resolution_contract`'s `DisputeCase`/`DisputeStatus` types by construction and round-trip only, not yet against a live deployment. One dispute-specific note: `delivery_id` is the **tuple-wrapped `DeliveryId`** struct for every `dispute_resolution_contract` call, unlike `escrow_contract`'s bare `u64` — verified directly against `dispute_resolution_contract/lib.rs`.
+
+**Read-model gaps** (see `EVENT_INDEXER.md` for the full event-to-state mapping): `senderShareBps` is always `null` — `dispute_resolved_split`'s event payload is just `(caller, delivery_id)` and the on-chain `DisputeCase` itself has no such field, so this backend has no source to sync it from. A dispute raised and resolved purely through `escrow_contract`'s Layer A (never touching `dispute_resolution_contract`) stays `OPEN` in this read model indefinitely — `escrow_contract.dispute_resolved` is ambiguous by itself (same fact the `escrow` module's own docs note) and this module has no fallback read to disambiguate it, unlike `escrow`'s own handler. Evidence `confirmedOnChain` is `false` for every item whenever no on-chain `DisputeCase` exists at all (same Layer-A-only scenario) — not an error, just nothing to confirm against.
+
 Everything else below is the **planned surface**, matching the module boundaries in `ARCHITECTURE.md` §4 — it will be filled in endpoint-by-endpoint as each module ships in Phase 5, not written speculatively ahead of the code that implements it.
 
 ## Planned Endpoint Families
 
 | Module | Example routes |
 |---|---|
-| `fleet` | `GET /fleets/:id`, `GET /fleets/:id/payout-address`, `POST /transactions/build/register-fleet`, `POST /transactions/build/add-driver-to-fleet`, `POST /transactions/build/accept-fleet-invite` |
-| `disputes` | `GET /disputes/:deliveryId`, `POST /disputes/:deliveryId/evidence`, `POST /transactions/build/raise-dispute` |
 | `reputation` | `GET /drivers/:address/reputation` |
 | `analytics` | `GET /analytics/gmv`, `GET /analytics/completion-rate`, `GET /analytics/dispute-rate` |
 | `admin` | `POST /admin/disputes/:deliveryId/resolve`, `POST /admin/users/:id/role`, `GET /admin/audit-log` |
