@@ -91,6 +91,11 @@ Same auth/config-fallback rules as escrow/deliveries: every `/transactions/build
 
 **Encoding caveat**: same as escrow/deliveries/disputes above — `reputation-scval-mapping.ts` encodes/decodes `identity_reputation_contract`'s `DriverProfile` type by construction and round-trip only, not yet against a live deployment.
 
+| `GET` | `/api/v1/notifications` | List the authenticated user's own notifications, newest first — optional `status` (`PENDING`/`SENT`/`FAILED`) and `limit` (default 20, max 100) query params |
+| `GET` | `/api/v1/notifications/:id` | Get one notification by id — `404` if it doesn't exist, `403 FORBIDDEN` if it exists but belongs to a different user |
+
+Both routes require authentication and are always scoped to `request.user.id` — there is no notion of an admin reading another user's notifications in this v1 slice (that would be a natural `admin` module addition later). Unlike every other module's read model, `notifications` rows aren't a mirror of on-chain state — they're generated as a side effect of `dispatchNotificationsFromEvent` reacting to *other* modules' blockchain events; see `EVENT_INDEXER.md` for exactly which events produce a notification (a deliberately narrow set — only events whose payload names an actor address directly) and `DATABASE.md` for why this module reads the shared `users`/`wallet_addresses` tables directly. No `POST`/build endpoints — there's nothing on-chain to build a transaction for. `channel` is always `EMAIL` for v1 (`ARCHITECTURE.md` §4: SMS/push are documented future work); the default `NotificationSender` logs instead of sending real email, the same genuinely-functional-dev-default pattern `auth`'s `Mailer` already established (`AUTHENTICATION.md`) — swap in a real provider behind the same port when one is needed.
+
 Everything else below is the **planned surface**, matching the module boundaries in `ARCHITECTURE.md` §4 — it will be filled in endpoint-by-endpoint as each module ships in Phase 5, not written speculatively ahead of the code that implements it.
 
 ## Planned Endpoint Families

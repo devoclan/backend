@@ -5,7 +5,7 @@ Off-chain backend for the FaniLab logistics-escrow platform. It complements the 
 [![CI](https://github.com/fanilab/fanilab-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/fanilab/fanilab-backend/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-> **Status:** Phase 4 — repository scaffold. No business modules are implemented yet; see [`ROADMAP.md`](./ROADMAP.md) for what's built and what's next.
+> **Status:** Phase 5 — incremental module implementation, in progress. `auth`, `users`, `indexer`, `deliveries`, `escrow`, `fleet`, `disputes`, `reputation`, and `notifications` are done; see [`ROADMAP.md`](./ROADMAP.md) for what's built and what's next.
 
 ## What this is
 

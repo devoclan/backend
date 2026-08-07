@@ -15,6 +15,10 @@ PostgreSQL via Prisma. Full source of truth: [`prisma/schema.prisma`](../prisma/
 - `disputes` uses `dispute_resolution_contract`'s richer `DisputeStatus` (`OPEN`, `RESOLVED_REFUND`, `RESOLVED_PAYOUT`, `SPLIT`) as the canonical shape, but the indexer also ingests `escrow_contract`'s simpler dispute-adjacent events (`delivery_disputed`, `dispute_resolved`) into the same row's timeline fields, so nothing from either on-chain layer is lost.
 - `driver_profiles.reputation_score` / `.deliveries_completed` are sourced from `identity_reputation_contract` (the canonical ledger per the Phase 1 §12 decision). `legacy_deliveries_completed` separately mirrors `delivery_contract`'s own redundant local counter, clearly labeled non-authoritative — it exists for transparency/debugging, never for ranking or eligibility decisions.
 
+## Notifications
+
+`notifications` is not a read model of on-chain state the way `deliveries`/`escrows`/`disputes`/`fleets`/`driver_profiles` are — there is no `notification_*` contract event to sync from. Rows are generated as a side effect of the `notifications` module reacting to *other* modules' blockchain events (see `EVENT_INDEXER.md`), then mutated as delivery is attempted. It resolves `userId` by reading `users`/`wallet_addresses` directly — the one deliberate exception to "modules never touch each other's tables" in this codebase, on the same precedent `auth` already set for `users`. See `src/modules/notifications/domain/ports.ts`'s `UserContactLookup` header comment.
+
 ## Blockchain Indexer Tables
 
 `blockchain_checkpoints` (one row per `(contractName, network)`) and `blockchain_events` (append-only raw event log, unique on `(contractName, network, rpcEventId)` — the Soroban RPC's own globally-unique event id) are the durability layer described in `ARCHITECTURE.md` §6. `blockchain_events` is intentionally kept even after a module has processed an event — it's the replay/audit source if a module's read-model logic needs to be rebuilt.
