@@ -96,13 +96,19 @@ Same auth/config-fallback rules as escrow/deliveries: every `/transactions/build
 
 Both routes require authentication and are always scoped to `request.user.id` — there is no notion of an admin reading another user's notifications in this v1 slice (that would be a natural `admin` module addition later). Unlike every other module's read model, `notifications` rows aren't a mirror of on-chain state — they're generated as a side effect of `dispatchNotificationsFromEvent` reacting to *other* modules' blockchain events; see `EVENT_INDEXER.md` for exactly which events produce a notification (a deliberately narrow set — only events whose payload names an actor address directly) and `DATABASE.md` for why this module reads the shared `users`/`wallet_addresses` tables directly. No `POST`/build endpoints — there's nothing on-chain to build a transaction for. `channel` is always `EMAIL` for v1 (`ARCHITECTURE.md` §4: SMS/push are documented future work); the default `NotificationSender` logs instead of sending real email, the same genuinely-functional-dev-default pattern `auth`'s `Mailer` already established (`AUTHENTICATION.md`) — swap in a real provider behind the same port when one is needed.
 
+| `GET` | `/api/v1/analytics/gmv` | Gross merchandise value — total `RELEASED` escrow amount, grouped **by token** (`[{ token, releasedAmount, releasedCount }]`); never summed across tokens, since different Soroban tokens are different units of value |
+| `GET` | `/api/v1/analytics/completion-rate` | `{ totalDeliveries, deliveredCount, completionRate }` — `completionRate` is a fraction in `[0, 1]`, `0` (not `NaN`) when there are no deliveries yet |
+| `GET` | `/api/v1/analytics/dispute-rate` | `{ totalDeliveries, disputedCount, disputeRate }` — counts every delivery *ever* disputed (one `disputes` row per delivery), not a snapshot of deliveries currently `DISPUTED` (a resolved dispute moves on to `DELIVERED`/`CANCELLED`, so a status-snapshot count would undercount) |
+| `GET` | `/api/v1/analytics/driver-tiers` | `{ bronze, silver, gold, total }` — driver count per reputation tier |
+
+All four require authentication **and** the `ADMIN` role (`403 FORBIDDEN` otherwise) — unlike other modules' single-resource `GET`s, which mirror public on-chain state "like a block explorer," these are value-added aggregate business metrics this backend computes, and GMV/dispute-rate in particular are platform-revenue-adjacent numbers a real deployment wouldn't want publicly exposed. No time-range filtering in this v1 slice — every figure is all-time; date-bucketed reporting is natural future work, not built speculatively ahead of a need for it. `analytics` reads `deliveries`/`escrows`/`disputes`/`driver_profiles` directly rather than through each owning module's use cases — the one module where that's the documented design (`ARCHITECTURE.md` §4/§10), not an exception to work around.
+
 Everything else below is the **planned surface**, matching the module boundaries in `ARCHITECTURE.md` §4 — it will be filled in endpoint-by-endpoint as each module ships in Phase 5, not written speculatively ahead of the code that implements it.
 
 ## Planned Endpoint Families
 
 | Module | Example routes |
 |---|---|
-| `analytics` | `GET /analytics/gmv`, `GET /analytics/completion-rate`, `GET /analytics/dispute-rate` |
 | `admin` | `POST /admin/disputes/:deliveryId/resolve`, `POST /admin/users/:id/role`, `GET /admin/audit-log` |
 | — | `POST /transactions/submit` (relay a signed XDR envelope, track confirmation) |
 
