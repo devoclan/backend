@@ -26,18 +26,32 @@ interface NotificationCandidate {
  * `Notification` rows for whichever actor address the event names — never
  * every event across all five tracked contracts.
  *
- * **Scope is deliberately narrow**: only events whose *own* topic/payload
- * names an actor address directly are handled here. Several otherwise
- * interesting lifecycle events (`delivery_created`, `delivery_confirmed`,
- * `escrow_funded`, `escrow_released`, `dispute_resolved_*`, ...) carry only
- * a delivery/fleet id, not an address — reading who to notify would mean
- * either a supplementary contract read (duplicating `deliveries`/`escrow`'s
- * own job) or reaching into another module's read-model table (the one
- * cross-module-access rule this backend has held to everywhere else, see
- * `domain/ports.ts`'s `UserContactLookup` header for the one deliberate,
- * schema-sanctioned exception). Documented gap, not an oversight — the same
- * "document rather than guess" posture `disputes`/`reputation`/`escrow`
- * already apply to their own sparse-payload cases.
+ * **Scope is deliberately narrow**, for three distinct reasons depending on
+ * the event:
+ *  - No address in the topic/payload at all — `delivery_confirmed`,
+ *    `delivery_cancelled`, `DeliveryInTransit`, `escrow_refunded`, the
+ *    escrow-layer `dispute_resolved` — reading who to notify would mean a
+ *    supplementary contract read (duplicating `deliveries`/`escrow`'s own
+ *    job) or reaching into another module's read-model table (the one
+ *    cross-module-access rule this backend holds to everywhere except
+ *    `UserContactLookup`'s one documented, schema-sanctioned exception —
+ *    see its header comment).
+ *  - An address *is* present but it's the acting admin's own, not a useful
+ *    notification target — `dispute_resolved_refund`/`_split`/`_payout`
+ *    (payload[0] is `caller`, i.e. the admin who just resolved it; the
+ *    sender/driver who'd actually want to know isn't in the payload).
+ *  - An address is present and *is* useful, but notifying the actor of
+ *    their own just-submitted action adds nothing — `delivery_created`
+ *    (payload is `(delivery_id, sender)`, verified against `deliveries`'
+ *    own `domain/ports.ts` and event fixtures; the sender already knows
+ *    they created it).
+ *  - `escrow_funded`'s payload contents beyond "no driver/token" aren't
+ *    documented anywhere this codebase can verify against, so it's treated
+ *    the same as "no address" rather than guessed at.
+ *
+ * Documented gaps/decisions, not oversights — the same "document rather
+ * than guess" posture `disputes`/`reputation`/`escrow` already apply to
+ * their own sparse-payload cases.
  *
  * A candidate address with no linked+verified local account is silently
  * skipped, not an error — not every on-chain actor necessarily has an
@@ -90,15 +104,33 @@ function resolveCandidate(event: BlockchainEventEnvelope): NotificationCandidate
     }
 
     case 'escrow': {
-      if (event.topic[0] !== 'delivery_disputed') return null;
       const chainDeliveryId = parseId(event.topic[1]);
-      const disputedBy = parseAddress(payload[0]);
-      if (chainDeliveryId === null || disputedBy === null) return null;
-      return {
-        address: disputedBy,
-        type: 'escrow.delivery_disputed',
-        payload: { chainDeliveryId },
-      };
+      if (chainDeliveryId === null) return null;
+
+      if (event.topic[0] === 'delivery_disputed') {
+        const disputedBy = parseAddress(payload[0]);
+        if (disputedBy === null) return null;
+        return {
+          address: disputedBy,
+          type: 'escrow.delivery_disputed',
+          payload: { chainDeliveryId },
+        };
+      }
+
+      if (event.topic[0] === 'escrow_released') {
+        // Payload is `(driver, payout, fee)` — verified against
+        // `EVENT_INDEXER.md`'s own documentation of this event, written
+        // while building the `escrow` module.
+        const driverAddress = parseAddress(payload[0]);
+        if (driverAddress === null) return null;
+        return {
+          address: driverAddress,
+          type: 'escrow.escrow_released',
+          payload: { chainDeliveryId },
+        };
+      }
+
+      return null;
     }
 
     case 'dispute-resolution': {

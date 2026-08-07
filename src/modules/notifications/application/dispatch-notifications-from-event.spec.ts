@@ -70,6 +70,26 @@ describe('dispatchNotificationsFromEvent', () => {
     ]);
   });
 
+  it('escrow.escrow_released: notifies the driver, reading the id from the topic and the address from payload[0]', async () => {
+    const { notificationRepository, userContactLookup, dispatchNotificationsFromEvent } = setup();
+    userContactLookup.seedAddress('GDRIVER', {
+      userId: 'user-driver',
+      email: 'driver@example.com',
+    });
+
+    await dispatchNotificationsFromEvent(
+      buildBlockchainEvent({
+        contractName: 'escrow',
+        topic: ['escrow_released', '9'],
+        payload: ['GDRIVER', '1000', '25'],
+      }),
+    );
+
+    expect(notificationRepository.all()).toMatchObject([
+      { userId: 'user-driver', type: 'escrow.escrow_released', payload: { chainDeliveryId: '9' } },
+    ]);
+  });
+
   it('dispute.dispute_raised: notifies the raiser, parsing the tuple-wrapped delivery id', async () => {
     const { notificationRepository, userContactLookup, dispatchNotificationsFromEvent } = setup();
     userContactLookup.seedAddress('GRAISER', { userId: 'user-3', email: 'raiser@example.com' });
@@ -146,14 +166,29 @@ describe('dispatchNotificationsFromEvent', () => {
     },
   );
 
-  it('skips events with no candidate address (e.g. delivery_created)', async () => {
-    const { notificationRepository, dispatchNotificationsFromEvent } = setup();
+  it('skips delivery_created even though its payload does carry an address (sender) — self-action, not a useful notification', async () => {
+    const { notificationRepository, userContactLookup, dispatchNotificationsFromEvent } = setup();
+    userContactLookup.seedAddress('GSENDER', { userId: 'user-7', email: 'sender@example.com' });
 
     await dispatchNotificationsFromEvent(
       buildBlockchainEvent({
         contractName: 'delivery',
         topic: ['delivery_created'],
         payload: ['1', 'GSENDER'],
+      }),
+    );
+
+    expect(notificationRepository.all()).toHaveLength(0);
+  });
+
+  it('skips events with genuinely no address at all in topic or payload (e.g. delivery_confirmed)', async () => {
+    const { notificationRepository, dispatchNotificationsFromEvent } = setup();
+
+    await dispatchNotificationsFromEvent(
+      buildBlockchainEvent({
+        contractName: 'delivery',
+        topic: ['delivery_confirmed'],
+        payload: ['1'],
       }),
     );
 
