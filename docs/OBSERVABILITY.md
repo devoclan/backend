@@ -10,15 +10,22 @@ Fastify's request logging is enabled by default (disabled only in `test` to keep
 
 - `GET /health` — database + Redis reachability, `200` when both are `ok`, `503` otherwise (`src/shared/http/routes/health.ts`).
 - `GET /health/indexer` — per-contract indexer lag against the real current ledger (queries the live Soroban RPC on every call), `200`/`503` per contract's lag vs. `INDEXER_LAG_ALERT_LEDGERS`. Implemented (`src/modules/indexer`); see [`EVENT_INDEXER.md`](./EVENT_INDEXER.md).
-- `GET /health/queue` — BullMQ queue depth/failure counts, once more background jobs exist beyond the indexer's own polling (Phase 5).
+- `GET /health/queue` — per-queue job counts (`waiting`/`active`/`delayed`/`failed`/`completed`) for every monitored BullMQ queue (`blockchain-indexer`, `notifications`). `503 degraded` if any queue has ever produced a job that exhausted all 5 of its retries (`failed > 0`) — unlike the indexer's numeric lag threshold, there's no natural "how many failures are acceptable" number here, so any failure at all is the signal. `reputation-reconciliation` is a queue name declared in `shared/queue/queues.ts` but never actually produced to or consumed from (`reputation` ended up doing a synchronous full-refresh instead) — deliberately excluded rather than reporting health for a queue nothing uses.
 
 ## Error Reporting
 
 Every thrown error resolves through the single error hierarchy (`src/shared/errors`) and its Fastify error handler — 5xx errors are logged at `error` level with the full error object; 4xx errors at `warn` level, since they're expected client mistakes, not incidents. This means error volume by `code` (from the `AppError` subclasses) is already a meaningful metric without any extra instrumentation.
 
-## Metrics (Planned)
+## Metrics
 
-Not yet implemented in this scaffold. Planned for Phase 5 alongside the modules that make metrics meaningful (request latency/throughput per route, indexer lag, queue depth/failure rate, dispute rate, GMV — the same aggregate metrics named in `PHASE_1_DOMAIN_ANALYSIS.md` §12 as `analytics` module responsibilities). Candidate approach: Prometheus-format `/metrics` endpoint via a Fastify plugin, scraped by whatever the deployment environment already runs — deferred rather than speculatively built now, per the project's "no placeholder implementations" standard.
+`GET /metrics` — Prometheus text format (`prom-client`, `src/shared/metrics/`), unauthenticated and outside `/api/v1` like every other operational endpoint. A real deployment puts this behind network policy (Prometheus scraping), not app-level auth. Exposes:
+
+- Node/process defaults — CPU, memory, event loop lag, GC (`collectDefaultMetrics`).
+- `http_requests_total` / `http_request_duration_seconds` — labeled by `method`, `route` (the route *pattern*, e.g. `/api/v1/deliveries/:chainDeliveryId`, never the raw URL — using the raw URL would blow up label cardinality with one series per distinct id ever requested), and `status_code`. Recorded via an `onResponse` hook (`shared/http/plugins/metrics.ts`).
+- `indexer_lag_ledgers{contract}` — the same `now_ledger - lastLedgerSeq` `/health/indexer` already computes, mirrored here as a gauge; only set for contracts with a configured id (see "What to Watch in Production" below for why `null` isn't represented as a value).
+- `queue_jobs{queue,state}` — the same counts `/health/queue` reports, as a gauge.
+
+`shared/metrics/registry.ts` deliberately holds only settable gauges, not self-updating `collect` callbacks — `shared/` can never import from `modules/*` (`eslint.config.js`'s boundary rule), so `app.ts` (the one place allowed to see both) refreshes the indexer-lag/queue gauges immediately before each scrape (`shared/http/routes/metrics.ts`'s injected `refreshExternalGauges` callback). GMV/dispute-rate-style business metrics (`analytics` module) aren't mirrored here in this v1 slice — they're `ADMIN`-gated business data, not the kind of thing an infra-facing scrape endpoint should expose without its own access control; `GET /api/v1/analytics/*` is the place for those.
 
 ## Tracing
 
@@ -26,4 +33,4 @@ Not yet implemented. If/when the module count and cross-service call graph (API 
 
 ## What to Watch in Production
 
-The single most important operational signal is **indexer lag** (`GET /health/indexer`, `now_ledger - lastLedgerSeq` per contract) — every other module's read model is only as fresh as the indexer, so lag is the leading indicator for "the API is about to start looking stale," ahead of any user-facing symptom. This mirrors the lesson in `PHASE_2_REFERENCE_ANALYSIS.md` §3 about treating indexer lag as a first-class health signal, not an afterthought. Currently tracks `escrow_contract` and `delivery_contract` only (`EVENT_INDEXER.md` § Current Scope) — a contract with no id configured reports `configured: false` and is excluded from the lag calculation rather than reported as failing.
+The single most important operational signal is **indexer lag** (`GET /health/indexer`, `now_ledger - lastLedgerSeq` per contract) — every other module's read model is only as fresh as the indexer, so lag is the leading indicator for "the API is about to start looking stale," ahead of any user-facing symptom. This mirrors the lesson in `PHASE_2_REFERENCE_ANALYSIS.md` §3 about treating indexer lag as a first-class health signal, not an afterthought. Tracks all five contracts with a consuming module — `escrow_contract`, `delivery_contract`, `fleet_management_contract`, `dispute_resolution_contract`, `identity_reputation_contract` (`EVENT_INDEXER.md` § Current Scope) — a contract with no id configured reports `configured: false` and is excluded from the lag calculation rather than reported as failing. `GET /health/queue`/`queue_jobs`' `failed` count is the second most important — a queue with failed jobs means something needed human attention and BullMQ's own retries already gave up.

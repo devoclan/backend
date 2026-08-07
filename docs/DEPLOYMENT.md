@@ -40,7 +40,9 @@ Contract IDs (`ESCROW_CONTRACT_ID`, etc.) and network settings (`STELLAR_NETWORK
 ## Health Checks
 
 - `GET /health` — liveness/readiness: database + Redis reachability (see `src/shared/http/routes/health.ts`).
-- `GET /health/indexer` — indexer lag (Phase 5, once the `indexer` module exists — see [`EVENT_INDEXER.md`](./EVENT_INDEXER.md)).
+- `GET /health/indexer` — indexer lag — see [`EVENT_INDEXER.md`](./EVENT_INDEXER.md).
+- `GET /health/queue` — BullMQ queue job counts/failures — see [`OBSERVABILITY.md`](./OBSERVABILITY.md).
+- `GET /metrics` — Prometheus scrape endpoint for whatever monitoring stack the deployment environment runs (Phase 6 — see [`OBSERVABILITY.md`](./OBSERVABILITY.md)); point network policy, not app-level auth, at restricting who can reach it.
 
 Point your orchestrator's readiness probe at `/health`; a `503` means don't route traffic yet, not that the process should be killed — Postgres/Redis blips are often transient.
 

@@ -3,7 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { Worker } from 'bullmq';
 import { getConfig } from '../../shared/config/index.js';
 import { getSorobanClient } from '../../blockchain/soroban-client.js';
-import { createGetIndexerHealthUseCase } from './application/index.js';
+import { createGetIndexerHealthUseCase, type ContractHealth } from './application/index.js';
 import {
   createPrismaCheckpointRepository,
   createSorobanEventSource,
@@ -58,4 +58,25 @@ export async function scheduleIndexer(): Promise<void> {
  * actually runs the scheduled polls — see src/workers/index.ts. */
 export function createIndexerBackgroundWorker(prisma: PrismaClient): Worker {
   return createIndexerWorker(prisma);
+}
+
+/**
+ * Same construction as `createIndexerHealthPlugin`, minus the HTTP route —
+ * for `/metrics` (`src/shared/metrics`) to read per-contract lag into a
+ * Prometheus gauge without duplicating `GetIndexerHealthResult`'s logic.
+ */
+export async function getIndexerLagMetrics(prisma: PrismaClient): Promise<ContractHealth[]> {
+  const config = getConfig();
+  const getIndexerHealth = createGetIndexerHealthUseCase({
+    checkpointRepository: createPrismaCheckpointRepository(prisma),
+    eventSource: createSorobanEventSource(getSorobanClient()),
+  });
+
+  const result = await getIndexerHealth({
+    network: config.STELLAR_NETWORK,
+    trackedContracts: getTrackedContracts(),
+    lagAlertThreshold: config.INDEXER_LAG_ALERT_LEDGERS,
+  });
+
+  return result.contracts;
 }

@@ -16,6 +16,8 @@ The live, authoritative reference is generated from the same Zod schemas that va
 |---|---|---|
 | `GET` | `/health` | Liveness/readiness: database + Redis connectivity |
 | `GET` | `/health/indexer` | Per-contract blockchain indexer lag (`now_ledger - lastLedgerSeq`); `200` when all tracked contracts are within `INDEXER_LAG_ALERT_LEDGERS`, `503` otherwise. See `EVENT_INDEXER.md`. |
+| `GET` | `/health/queue` | Per-queue BullMQ job counts; `503` if any monitored queue has a job that exhausted its retries. See `OBSERVABILITY.md`. |
+| `GET` | `/metrics` | Prometheus-format scrape endpoint (HTTP latency/count, indexer lag, queue depth). See `OBSERVABILITY.md`. |
 | `GET` | `/api-docs` | Interactive OpenAPI/Swagger UI |
 | `POST` | `/api/v1/auth/register` | Create a local account (`email`, `password`) — sends a verification email (logged locally in dev, see `AUTHENTICATION.md`) |
 | `POST` | `/api/v1/auth/login` | Exchange credentials for an access + refresh token pair |

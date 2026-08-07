@@ -6,11 +6,19 @@ import {
 } from 'fastify-type-provider-zod';
 import { logger } from './shared/logger/index.js';
 import { handleError } from './shared/errors/index.js';
-import { securityPlugin, docsPlugin, healthRoutes } from './shared/http/index.js';
+import {
+  securityPlugin,
+  docsPlugin,
+  metricsPlugin,
+  healthRoutes,
+  createMetricsRoutes,
+} from './shared/http/index.js';
+import { indexerLagLedgers, queueJobsGauge } from './shared/metrics/index.js';
+import { getQueueHealth } from './shared/queue/index.js';
 import { getPrismaClient } from './shared/database/index.js';
 import { createAuthModule } from './modules/auth/index.js';
 import { createUsersModule } from './modules/users/index.js';
-import { createIndexerHealthPlugin } from './modules/indexer/index.js';
+import { createIndexerHealthPlugin, getIndexerLagMetrics } from './modules/indexer/index.js';
 import { createDeliveriesModule } from './modules/deliveries/index.js';
 import { createEscrowModule } from './modules/escrow/index.js';
 import { createFleetModule } from './modules/fleet/index.js';
@@ -43,11 +51,35 @@ export async function buildApp() {
   app.setSerializerCompiler(serializerCompiler);
   app.setErrorHandler(handleError);
 
+  const prisma = getPrismaClient();
+
   await app.register(securityPlugin);
   await app.register(docsPlugin);
+  await app.register(metricsPlugin);
   await app.register(healthRoutes);
+  await app.register(
+    createMetricsRoutes({
+      refreshExternalGauges: async () => {
+        const [contracts, queues] = await Promise.all([
+          getIndexerLagMetrics(prisma),
+          getQueueHealth(),
+        ]);
+        for (const contract of contracts) {
+          if (contract.lagLedgers !== null) {
+            indexerLagLedgers.set({ contract: contract.contractName }, contract.lagLedgers);
+          }
+        }
+        for (const queue of queues) {
+          queueJobsGauge.set({ queue: queue.name, state: 'waiting' }, queue.waiting);
+          queueJobsGauge.set({ queue: queue.name, state: 'active' }, queue.active);
+          queueJobsGauge.set({ queue: queue.name, state: 'delayed' }, queue.delayed);
+          queueJobsGauge.set({ queue: queue.name, state: 'failed' }, queue.failed);
+          queueJobsGauge.set({ queue: queue.name, state: 'completed' }, queue.completed);
+        }
+      },
+    }),
+  );
 
-  const prisma = getPrismaClient();
   await app.register(createAuthModule(prisma), { prefix: '/api/v1' });
   await app.register(createUsersModule(prisma), { prefix: '/api/v1' });
   await app.register(createIndexerHealthPlugin(prisma));
