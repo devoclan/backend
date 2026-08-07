@@ -30,6 +30,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
+    "load-test": "tsx scripts/load-test.ts",
     "prepare": "node -e \"try{require('husky')}catch(e){process.exit(0)}\" && husky || true"
   },
   "dependencies": {
@@ -55,10 +56,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.14.0",
+    "@types/autocannon": "^7.12.7",
     "@types/bcrypt": "^5.0.2",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.9.0",
     "@vitest/coverage-v8": "^2.1.4",
+    "autocannon": "^8.0.0",
     "eslint": "^9.14.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-boundaries": "^5.0.1",
@@ -81,5 +84,15 @@
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "bcrypt",
+      "esbuild",
+      "msgpackr-extract",
+      "prisma"
+    ]
   }
 }
