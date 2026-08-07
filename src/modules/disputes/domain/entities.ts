@@ -1,6 +1,6 @@
-import type { DisputeStatus } from '@prisma/client';
+import type { DisputeStatus, UserRole } from '@prisma/client';
 
-export type { DisputeStatus };
+export type { DisputeStatus, UserRole };
 
 export interface Dispute {
   id: string;

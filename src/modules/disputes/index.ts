@@ -14,6 +14,7 @@ import {
   createLocalEvidenceStorage,
   createPrismaDisputeRepository,
   createPrismaEvidenceRepository,
+  createPrismaWalletOwnershipRepository,
   createSorobanDisputeContractClient,
   subscribeDisputeEventSync,
 } from './infrastructure/index.js';
@@ -44,6 +45,7 @@ export function createDisputesModule(prisma: PrismaClient): FastifyPluginAsyncZo
   const disputeRepository = createPrismaDisputeRepository(prisma);
   const evidenceRepository = createPrismaEvidenceRepository(prisma);
   const evidenceStorage = createLocalEvidenceStorage(config.EVIDENCE_STORAGE_DIR);
+  const walletOwnershipRepository = createPrismaWalletOwnershipRepository(prisma);
   const contractClient = config.DISPUTE_RESOLUTION_CONTRACT_ID
     ? createSorobanDisputeContractClient(getSorobanClient(), config.DISPUTE_RESOLUTION_CONTRACT_ID)
     : createUnconfiguredContractClient();
@@ -61,8 +63,14 @@ export function createDisputesModule(prisma: PrismaClient): FastifyPluginAsyncZo
       disputeRepository,
       evidenceRepository,
       evidenceStorage,
+      walletOwnershipRepository,
     }),
-    downloadEvidence: createDownloadEvidenceUseCase({ evidenceRepository, evidenceStorage }),
+    downloadEvidence: createDownloadEvidenceUseCase({
+      evidenceRepository,
+      evidenceStorage,
+      disputeRepository,
+      walletOwnershipRepository,
+    }),
     buildTransactions: createBuildDisputeTransactionsUseCases({
       transactionBuilder: contractClient,
     }),

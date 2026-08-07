@@ -9,6 +9,7 @@ import type {
   Evidence,
   EvidenceRepository,
   EvidenceStorage,
+  WalletOwnershipRepository,
 } from '../../domain/index.js';
 
 export function createInMemoryDisputeRepository(): DisputeRepository & {
@@ -23,6 +24,9 @@ export function createInMemoryDisputeRepository(): DisputeRepository & {
     },
     async findByChainDeliveryId(chainDeliveryId) {
       return disputes.get(key(chainDeliveryId)) ?? null;
+    },
+    async findById(id) {
+      return [...disputes.values()].find((dispute) => dispute.id === id) ?? null;
     },
     async upsert(chainDeliveryId, fields) {
       const existing = disputes.get(key(chainDeliveryId));
@@ -93,6 +97,20 @@ export function createFakeDisputeContractReader(): DisputeContractReader & {
       const record = records.get(chainDeliveryId.toString());
       if (!record) throw new Error(`No fake chain case seeded for ${chainDeliveryId.toString()}`);
       return record;
+    },
+  };
+}
+
+export function createFakeWalletOwnershipRepository(): WalletOwnershipRepository & {
+  seed(userId: string, address: string): void;
+} {
+  const owned = new Map<string, string>();
+  return {
+    seed(userId, address) {
+      owned.set(address, userId);
+    },
+    async isOwnedByUser(userId, address) {
+      return owned.get(address) === userId;
     },
   };
 }

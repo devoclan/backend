@@ -1,6 +1,8 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { authenticate, ok } from '../../../shared/http/index.js';
+import { UnauthorizedError } from '../../../shared/errors/index.js';
 import type { EvidenceWithVerification, GetDisputeResult } from '../application/index.js';
+import type { UserRole } from '../domain/index.js';
 import type {
   createBuildDisputeTransactionsUseCases,
   createDownloadEvidenceUseCase,
@@ -52,6 +54,18 @@ function serializeDispute(result: GetDisputeResult) {
   };
 }
 
+function requireUser(request: { user?: { id: string; role: UserRole } }): {
+  id: string;
+  role: UserRole;
+} {
+  if (!request.user) {
+    // Unreachable in practice — both routes below attach `authenticate` as
+    // a preHandler, which throws before a handler body ever runs.
+    throw new UnauthorizedError('Authentication required');
+  }
+  return request.user;
+}
+
 export function createDisputeRoutes(useCases: DisputeUseCases): FastifyPluginAsyncZod {
   return async function disputeRoutes(app) {
     app.get(
@@ -81,6 +95,7 @@ export function createDisputeRoutes(useCases: DisputeUseCases): FastifyPluginAsy
           contentType: request.body.contentType,
           uploadedBy: request.body.uploadedBy,
           bytes: Buffer.from(request.body.base64Content, 'base64'),
+          requesterId: requireUser(request).id,
         });
         void reply.status(200).send(ok({ evidenceId: evidence.id, hash: evidence.hash }));
       },
@@ -90,8 +105,11 @@ export function createDisputeRoutes(useCases: DisputeUseCases): FastifyPluginAsy
       '/disputes/evidence/:evidenceId/download',
       { preHandler: authenticate, schema: { params: evidenceIdParamsSchema } },
       async (request, reply) => {
+        const user = requireUser(request);
         const { contentType, bytes } = await useCases.downloadEvidence({
           evidenceId: request.params.evidenceId,
+          requesterId: user.id,
+          requesterRole: user.role,
         });
         void reply.status(200).type(contentType).send(bytes);
       },

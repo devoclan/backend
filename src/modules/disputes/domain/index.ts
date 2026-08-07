@@ -1,4 +1,4 @@
-export type { ChainDisputeCase, Dispute, DisputeStatus, Evidence } from './entities.js';
+export type { ChainDisputeCase, Dispute, DisputeStatus, Evidence, UserRole } from './entities.js';
 export type {
   AddEvidenceHashTxInput,
   DisputeContractReader,
@@ -10,5 +10,12 @@ export type {
   RaiseDisputeTxInput,
   ResolveDisputeSplitFundsTxInput,
   ResolveDisputeTxInput,
+  WalletOwnershipRepository,
 } from './ports.js';
-export { DisputeNotFoundError, DisputeNotOpenError, EvidenceNotFoundError } from './errors.js';
+export {
+  DisputeNotFoundError,
+  DisputeNotOpenError,
+  EvidenceNotFoundError,
+  ForbiddenEvidenceAccessError,
+  ForbiddenEvidenceUploadError,
+} from './errors.js';

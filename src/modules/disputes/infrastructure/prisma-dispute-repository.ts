@@ -21,6 +21,11 @@ export function createPrismaDisputeRepository(prisma: PrismaClient): DisputeRepo
       return record ? toDomain(record) : null;
     },
 
+    async findById(id) {
+      const record = await prisma.dispute.findUnique({ where: { id } });
+      return record ? toDomain(record) : null;
+    },
+
     async upsert(chainDeliveryId, fields) {
       const data = {
         status: fields.status,

@@ -20,6 +20,10 @@ export interface DisputeUpsertFields {
  */
 export interface DisputeRepository {
   findByChainDeliveryId(chainDeliveryId: bigint): Promise<Dispute | null>;
+  /** Looked up by the evidence table's `disputeId` (the local UUID, not the
+   * chain id) — added for `downloadEvidence`'s access check, see that
+   * file's header comment. */
+  findById(id: string): Promise<Dispute | null>;
   upsert(chainDeliveryId: bigint, fields: DisputeUpsertFields): Promise<void>;
 }
 
@@ -42,6 +46,19 @@ export interface EvidenceStorage {
     storageUrl: string;
   }>;
   read(storageUrl: string): Promise<Buffer>;
+}
+
+/**
+ * Backs `uploadEvidence`/`downloadEvidence`'s access checks — reads the
+ * shared `wallet_addresses` table directly, the same documented exception
+ * `notifications`'s `UserContactLookup` established (see that file's
+ * header comment) rather than a new one. A row only ever exists once a
+ * wallet has completed the challenge/signature flow (`users` module), so
+ * "owned" here already implies verified — there's no unverified-but-
+ * present state to additionally guard against.
+ */
+export interface WalletOwnershipRepository {
+  isOwnedByUser(userId: string, address: string): Promise<boolean>;
 }
 
 /** `get_dispute` is the only on-chain read `dispute_resolution_contract`

@@ -31,6 +31,10 @@ Please do not open a public GitHub issue for security vulnerabilities. Instead, 
 
 Privileged/sensitive actions (admin dispute resolutions, KYC status changes, role changes) are recorded in the `audit_logs` table with actor, action, entity, and timestamp — a structural requirement of the `admin` module design (`ARCHITECTURE.md` §4), not an afterthought bolted on later.
 
+## Security Review History
+
+**Phase 6 (first dedicated pass)**: a full-codebase review covering auth/authorization, IDOR, path traversal, injection, cryptographic token handling, mass assignment, SSRF, and sensitive-data exposure. One real, fixed finding: `disputes` evidence upload/download had no ownership check at all — any authenticated user could upload arbitrary content to any open dispute under any address's name, and download any dispute's evidence file given only its id (itself discoverable via the public dispute-read endpoint). Fixed by requiring the caller to own the wallet they're uploading as, and restricting download to `ADMIN`/the uploader/the dispute's raiser — see `API_REFERENCE.md`'s disputes section and `src/modules/disputes/application/{upload,download}-evidence.ts`. Everything else reviewed (JWT handling, wallet-link challenge binding, password-reset token design, evidence-storage path-traversal guard, CORS/Helmet config, error-message/log redaction) held up without changes needed.
+
 ## Known On-Chain Considerations Relevant to Backend Security
 
 From `PHASE_1_DOMAIN_ANALYSIS.md` §3: `escrow_contract.freeze_funds` has no `require_auth` check at all on-chain — callable by anyone. The backend does not rely on this function being access-controlled and does not expose an unauthenticated route that triggers it; only the `dispute_resolution_contract`'s own authorized flow calls it, on-chain, outside this backend's control.
