@@ -319,6 +319,39 @@ model DriverProfile {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Fraud detection (Phase 5 — rule-based velocity heuristics, ARCHITECTURE.md §4)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// One category per blockchain event the fraud-detection module tracks —
+/// see src/modules/fraud-detection/application/record-actor-activity-from-event.ts
+/// for exactly which event/address pair backs each category and why.
+enum ActorActivityCategory {
+  DELIVERY_CREATED
+  ESCROW_RELEASED
+  DISPUTE_RAISED
+
+  @@map("actor_activity_category")
+}
+
+/// Durable, append-only per-actor activity log — never mutated, only
+/// inserted into (by dispatchActorActivityFromEvent) and counted from (by
+/// assessActor). Deliberately not a pre-computed "risk score" table: v1
+/// rule thresholds recompute a live count on every read rather than
+/// maintaining incrementally-updated derived state that could drift, same
+/// "recompute from source of truth" posture `reputation` already applies
+/// to its own on-chain scoring formula.
+model ActorActivity {
+  id         String                @id @default(uuid())
+  address    String
+  category   ActorActivityCategory
+  occurredAt DateTime              @map("occurred_at")
+  createdAt  DateTime              @default(now()) @map("created_at")
+
+  @@index([address, category, occurredAt])
+  @@map("actor_activities")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Blockchain indexer (checkpointing + idempotent event log — ARCHITECTURE.md §6)
 // ─────────────────────────────────────────────────────────────────────────
 

@@ -14,6 +14,7 @@ import {
   createNotificationsBackgroundWorker,
   createNotificationsModule,
 } from '../modules/notifications/index.js';
+import { createFraudDetectionModule } from '../modules/fraud-detection/index.js';
 
 const log = logger.child({ process: 'worker' });
 
@@ -51,6 +52,7 @@ const wireModuleEventSubscriptions: Array<() => void> = [
   () => void createDisputesModule(getPrismaClient()),
   () => void createReputationModule(getPrismaClient()),
   () => void createNotificationsModule(getPrismaClient()),
+  () => void createFraudDetectionModule(getPrismaClient()),
 ];
 
 async function main(): Promise<void> {

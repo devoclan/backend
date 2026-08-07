@@ -18,6 +18,7 @@ import { createDisputesModule } from './modules/disputes/index.js';
 import { createReputationModule } from './modules/reputation/index.js';
 import { createNotificationsModule } from './modules/notifications/index.js';
 import { createAnalyticsModule } from './modules/analytics/index.js';
+import { createFraudDetectionModule } from './modules/fraud-detection/index.js';
 
 /**
  * Composes the Fastify instance with no side effects (no `listen()` call) so
@@ -29,8 +30,8 @@ import { createAnalyticsModule } from './modules/analytics/index.js';
  * per-instance Fastify flag.
  *
  * Module route registration is added here incrementally as each module
- * ships in Phase 5 — fraud-detection/admin are not registered yet, and
- * intentionally so, rather than pre-wired ahead of their implementation.
+ * ships in Phase 5 — `admin` is not registered yet, and intentionally so,
+ * rather than pre-wired ahead of its implementation.
  */
 export async function buildApp() {
   const app = Fastify({
@@ -57,6 +58,7 @@ export async function buildApp() {
   await app.register(createReputationModule(prisma), { prefix: '/api/v1' });
   await app.register(createNotificationsModule(prisma), { prefix: '/api/v1' });
   await app.register(createAnalyticsModule(prisma), { prefix: '/api/v1' });
+  await app.register(createFraudDetectionModule(prisma), { prefix: '/api/v1' });
 
   return app;
 }
