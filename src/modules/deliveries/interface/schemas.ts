@@ -74,8 +74,3 @@ export const cancelDeliveryBodySchema = z.object({
   senderAddress: stellarAddress,
   chainDeliveryId,
 });
-
-export const raiseDisputeBodySchema = z.object({
-  callerAddress: stellarAddress,
-  chainDeliveryId,
-});

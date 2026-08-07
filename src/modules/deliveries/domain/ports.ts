@@ -69,14 +69,22 @@ export interface CancelDeliveryTxInput extends DeliveryIdTxInput {
   senderAddress: string;
 }
 
-export interface RaiseDisputeTxInput extends DeliveryIdTxInput {
-  callerAddress: string;
-}
-
 /**
  * Builds unsigned XDR for each `delivery_contract` call reviewed in
  * PHASE_1_DOMAIN_ANALYSIS.md §4 — this backend never signs these; it only
  * builds them for the caller's own wallet (ARCHITECTURE.md §2/§9).
+ *
+ * `delivery_contract.raise_dispute` is deliberately **not** exposed here,
+ * even though the contract has its own such method (PHASE_1_DOMAIN_ANALYSIS.md
+ * §4/§10) — it's only ever meant to be reached as an intermediate leg of
+ * `dispute_resolution_contract.raise_dispute`'s cross-contract call chain
+ * (`dispute_resolution_contract.raise_dispute` → `delivery_contract.raise_dispute`
+ * → `escrow_contract.raise_dispute`), the same reasoning `escrow`'s own
+ * domain/ports.ts already documents for excluding *its* `raise_dispute`.
+ * Exposing this leg directly would let a client bypass `dispute_resolution_contract`
+ * entirely, landing in exactly the "Layer A/B-only" gap `disputes` module's
+ * docs describe — the `disputes` module owns the one correct entry point
+ * (`POST /transactions/build/raise-dispute`, calling `dispute_resolution_contract`).
  */
 export interface DeliveryTransactionBuilder {
   buildCreateDelivery(input: CreateDeliveryTxInput): Promise<string>;
@@ -84,5 +92,4 @@ export interface DeliveryTransactionBuilder {
   buildMarkInTransit(input: MarkInTransitTxInput): Promise<string>;
   buildConfirmDelivery(input: ConfirmDeliveryTxInput): Promise<string>;
   buildCancelDelivery(input: CancelDeliveryTxInput): Promise<string>;
-  buildRaiseDispute(input: RaiseDisputeTxInput): Promise<string>;
 }

@@ -34,7 +34,6 @@ function createUnconfiguredContractClient(): DeliveryContractReader & DeliveryTr
     buildMarkInTransit: fail,
     buildConfirmDelivery: fail,
     buildCancelDelivery: fail,
-    buildRaiseDispute: fail,
   };
 }
 

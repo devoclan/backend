@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
+import { Keypair } from '@stellar/stellar-sdk';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../../app.js';
 import { disconnectPrisma } from '../../../shared/database/index.js';
@@ -33,7 +33,7 @@ describe.skipIf(!dbAvailable)('reputation routes (integration)', () => {
   });
 
   async function seedDriverProfile() {
-    const address = `GDRIVER-${randomUUID()}`;
+    const address = Keypair.random().publicKey();
     createdAddresses.push(address);
     await prisma.driverProfile.create({
       data: {

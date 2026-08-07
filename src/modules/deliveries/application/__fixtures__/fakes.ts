@@ -78,9 +78,6 @@ export function createFakeDeliveryTransactionBuilder(): DeliveryTransactionBuild
     async buildCancelDelivery() {
       return 'unsigned-xdr:cancel-delivery';
     },
-    async buildRaiseDispute() {
-      return 'unsigned-xdr:raise-dispute';
-    },
   };
 }
 

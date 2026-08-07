@@ -16,7 +16,6 @@ import {
   listDeliveriesQuerySchema,
   listDeliveriesResponseSchema,
   markInTransitBodySchema,
-  raiseDisputeBodySchema,
   transactionResponseSchema,
 } from './schemas.js';
 
@@ -146,21 +145,6 @@ export function createDeliveriesRoutes(useCases: DeliveriesUseCases): FastifyPlu
       },
       async (request, reply) => {
         const xdrEnvelope = await useCases.buildTransactions.buildCancelDeliveryTransaction({
-          ...request.body,
-          chainDeliveryId: BigInt(request.body.chainDeliveryId),
-        });
-        void reply.status(200).send(ok({ xdr: xdrEnvelope }));
-      },
-    );
-
-    app.post(
-      '/transactions/build/raise-dispute',
-      {
-        preHandler: authenticate,
-        schema: { body: raiseDisputeBodySchema, response: { 200: transactionResponseSchema } },
-      },
-      async (request, reply) => {
-        const xdrEnvelope = await useCases.buildTransactions.buildRaiseDisputeTransaction({
           ...request.body,
           chainDeliveryId: BigInt(request.body.chainDeliveryId),
         });

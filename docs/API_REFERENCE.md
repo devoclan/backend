@@ -42,7 +42,6 @@ All `/api/v1/users/*` routes require authentication; unauthenticated requests ge
 | `POST` | `/api/v1/transactions/build/mark-in-transit` | Unsigned XDR for `mark_in_transit` — the assigned driver only |
 | `POST` | `/api/v1/transactions/build/confirm-delivery` | Unsigned XDR for `confirm_delivery` — the recipient only |
 | `POST` | `/api/v1/transactions/build/cancel-delivery` | Unsigned XDR for `cancel_delivery` — the sender only |
-| `POST` | `/api/v1/transactions/build/raise-dispute` | Unsigned XDR for `raise_dispute` — sender or recipient |
 
 All `/api/v1/transactions/build/*` routes require authentication (anti-abuse — each call does real RPC work: an account fetch and a full simulate/prepare). All return `{ "data": { "xdr": "<unsigned envelope>" } }`. `GET /deliveries*` is public — it mirrors public on-chain state, like a block explorer. If `DELIVERY_CONTRACT_ID` isn't configured for the running environment (blank by default, see `.env.example`), the build endpoints return `502 BLOCKCHAIN_ERROR` with a clear message rather than a generic failure.
 
@@ -76,7 +75,7 @@ Same auth/config-fallback rules as deliveries: all three build endpoints require
 | `POST` | `/api/v1/transactions/build/resolve-dispute-pay-driver` | Unsigned XDR for `resolve_dispute_pay_driver` — admin only |
 | `POST` | `/api/v1/transactions/build/resolve-dispute-split-funds` | Unsigned XDR for `resolve_dispute_split_funds` — admin only, `{ senderShareBps }` (0–10000) |
 
-Same auth/config-fallback rules as escrow/deliveries: every `/transactions/build/*` and evidence-upload/download endpoint requires authentication, and the build endpoints return `502 BLOCKCHAIN_ERROR` if `DISPUTE_RESOLUTION_CONTRACT_ID` isn't configured. `escrow_contract`'s own `raise_dispute`/`resolve_dispute`/`resolve_dispute_split` (Layer A) are deliberately **not** exposed anywhere in this API — this module owns the full two-layer flow (`PHASE_1_DOMAIN_ANALYSIS.md` §5), and the `escrow` module's own endpoints intentionally omit them.
+Same auth/config-fallback rules as escrow/deliveries: every `/transactions/build/*` and evidence-upload/download endpoint requires authentication, and the build endpoints return `502 BLOCKCHAIN_ERROR` if `DISPUTE_RESOLUTION_CONTRACT_ID` isn't configured. `escrow_contract`'s own `raise_dispute`/`resolve_dispute`/`resolve_dispute_split` (Layer A) and `delivery_contract`'s own `raise_dispute` (the intermediate leg `dispute_resolution_contract.raise_dispute` calls internally, `PHASE_1_DOMAIN_ANALYSIS.md` §10's call graph) are deliberately **not** exposed anywhere in this API — this module owns the one client-facing `POST /transactions/build/raise-dispute` endpoint for the full two-layer flow (`PHASE_1_DOMAIN_ANALYSIS.md` §5), and the `escrow`/`deliveries` modules' own endpoints intentionally omit their versions of it.
 
 **Encoding caveat**: same as escrow/deliveries above — `disputes-scval-mapping.ts` encodes/decodes `dispute_resolution_contract`'s `DisputeCase`/`DisputeStatus` types by construction and round-trip only, not yet against a live deployment. One dispute-specific note: `delivery_id` is the **tuple-wrapped `DeliveryId`** struct for every `dispute_resolution_contract` call, unlike `escrow_contract`'s bare `u64` — verified directly against `dispute_resolution_contract/lib.rs`.
 

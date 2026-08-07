@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
+import { Keypair } from '@stellar/stellar-sdk';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../../app.js';
 import { disconnectPrisma } from '../../../shared/database/index.js';
@@ -43,8 +43,8 @@ describe.skipIf(!dbAvailable)('deliveries routes (integration)', () => {
     await prisma.delivery.create({
       data: {
         chainDeliveryId,
-        senderAddress: overrides.senderAddress ?? `GSENDER-${randomUUID()}`,
-        recipientAddress: `GRECIPIENT-${randomUUID()}`,
+        senderAddress: overrides.senderAddress ?? Keypair.random().publicKey(),
+        recipientAddress: Keypair.random().publicKey(),
         status: 'PENDING',
         origin: 'Lagos',
         destination: 'Accra',
@@ -58,7 +58,7 @@ describe.skipIf(!dbAvailable)('deliveries routes (integration)', () => {
   }
 
   it('lists deliveries filtered by sender address', async () => {
-    const sender = `GFILTER-${randomUUID()}`;
+    const sender = Keypair.random().publicKey();
     const chainDeliveryId = await seedDelivery({ senderAddress: sender });
 
     const response = await app.inject({
