@@ -107,13 +107,18 @@ All four require authentication **and** the `ADMIN` role (`403 FORBIDDEN` otherw
 
 Every rule is evaluated fresh on every call against `ActorActivity`, a durable append-only per-actor activity log this module's own event handler writes to (`EVENT_INDEXER.md`) — no persisted "verdict" that could go stale. v1 thresholds are fixed constants (`application/assess-actor.ts`), not tuned against real traffic (none exists yet) or configurable — both documented future work alongside ML-based scoring (`ROADMAP.md` §9), not built speculatively ahead of a need for them. No "list all currently-flagged actors" endpoint in v1 — that would mean evaluating every actor with any logged activity on every call, which doesn't scale without a materialized/indexed approach this module doesn't build yet; only the single-actor lookup, matching how every other module started with single-resource `GET`s.
 
+| `GET` | `/api/v1/admin/disputes` | Lists every `OPEN` dispute for review — `[{ chainDeliveryId, status, raisedBy, raisedAt, evidenceCount }]`, oldest-raised first |
+| `POST` | `/api/v1/admin/users/:id/role` | Sets a user's role — `{ role }` (`CUSTOMER`/`COURIER`/`FLEET_MANAGER`/`ADMIN`); `404` for an unknown user id |
+| `GET` | `/api/v1/admin/audit-log` | Lists `AuditLog` entries, newest first — optional `limit` (default 50, max 200) |
+
+All three `ADMIN`-gated. `GET /admin/disputes` deliberately diverges from this doc's own earlier-planned `POST /admin/disputes/:deliveryId/resolve`: it's a **review list** — `disputes` already exposes the three actual resolve-transaction-build endpoints (`POST /transactions/build/resolve-dispute-*`, see the disputes section above), and an admin frontend calls those directly once armed with this list's context, rather than `admin` reimplementing a fourth, redundant path to the same on-chain calls. `POST /admin/users/:id/role` is off-chain-only (no on-chain equivalent — `role` lives solely in this backend's own `users` table) and writes one `AuditLog` row per call, success or not, with the acting admin's own email as `actorLabel` (looked up server-side, never trusted from the request) — visible immediately via `GET /admin/audit-log`. `admin` reads `disputes`'/`deliveries`' tables directly for its review list and the shared `users` table directly for role management — the same `ARCHITECTURE.md`-documented exception `analytics`/`notifications` already established, not a new one.
+
 Everything else below is the **planned surface**, matching the module boundaries in `ARCHITECTURE.md` §4 — it will be filled in endpoint-by-endpoint as each module ships in Phase 5, not written speculatively ahead of the code that implements it.
 
 ## Planned Endpoint Families
 
 | Module | Example routes |
 |---|---|
-| `admin` | `POST /admin/disputes/:deliveryId/resolve`, `POST /admin/users/:id/role`, `GET /admin/audit-log` |
 | — | `POST /transactions/submit` (relay a signed XDR envelope, track confirmation) |
 
 Full request/response schemas for each of these will be documented here as they're implemented — see `ROADMAP.md` §5 (Phase 5 module DoD requires an OpenAPI schema entry and a request/response example for every exposed endpoint before a module is considered done).
