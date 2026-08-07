@@ -86,6 +86,19 @@ Each module, before moving to the next, must ship with:
 | `fraud-detection` | ✅ Done — one endpoint (`GET /fraud-detection/actors/:address`, `ADMIN`-gated), evaluating three v1 rule-based velocity heuristics fresh on every call against a durable, append-only `ActorActivity` log this module's own event handler writes to (`DELIVERY_CREATION_VELOCITY`, `ESCROW_RELEASE_VELOCITY`, `DISPUTE_RAISE_VELOCITY` — chosen to match `ARCHITECTURE.md` §4's "delivery/escrow/dispute velocity per actor" as closely as the actually-available event payloads allow). Writes synchronously in its event handler (no BullMQ queue, unlike `notifications`) — a single fast `INSERT` has no failure-prone external channel to isolate from. ML-based scoring and configurable/tunable thresholds are both out of scope for v1, documented future work (`ROADMAP.md` §9) |
 | `admin` | ✅ Done — three `ADMIN`-gated endpoints: `GET /admin/disputes` (open-dispute review list, reading `disputes`/`deliveries` directly — the same documented cross-module-read exception `analytics` established, not a new one), `POST /admin/users/:id/role` (off-chain-only role assignment, the third module to touch the shared `users` table directly after `auth`/`users` themselves), and `GET /admin/audit-log` (reads the `audit_logs` table `ARCHITECTURE.md` §4 planned back in Phase 3/4 but nothing had written to until now). Deliberately does **not** build a fourth `POST /admin/disputes/:deliveryId/resolve` path to the same on-chain calls `disputes` already exposes — `admin`'s frontend calls those directly once armed with the review list, avoiding duplicated business logic. No shared "audit-logging decorator" — `admin` is the only consumer so far, so audit-log writing stays module-local rather than speculatively generalized |
 
+### Phase 6 — Hardening & Release Readiness
+Not part of the original task-brief phase gate (§5's Phases 1–5 are) — this formalizes what M8/M9 (§6) already named as the work left after every module shipped: the codebase is feature-complete but has never had a dedicated security pass, has no metrics endpoint despite `OBSERVABILITY.md` planning one since Phase 4, has never been load-tested, and `docker compose up` — the actual deployment runbook — was never verified end-to-end (Phase 4's own DoD flagged this explicitly: no Docker was available in the sandbox that scaffold was built in).
+
+**DoD:**
+- Security review pass completed, real findings fixed, `SECURITY.md` reflects actual (not just intended) posture.
+- `GET /metrics` (Prometheus format) and `GET /health/queue` implemented and tested — both were `OBSERVABILITY.md`-planned, not built until now.
+- A local Prometheus + Grafana stack (docker-compose, optional profile) scrapes `/metrics` and renders a real starter dashboard against live data — verified visually, not just "the endpoint returns 200."
+- A load test run against the real running server, results documented.
+- The full `docker compose up` stack (`api` + `worker` + `postgres` + `redis`, all four, built from the real `Dockerfile`) verified booting and serving traffic — the thing `DEPLOYMENT.md` has described since Phase 4 without ever having been run.
+- `v1.0.0` tagged once everything above is green.
+
+**Status:** In progress.
+
 ## 6. Milestones & Deliverables
 
 | Milestone | Deliverable | Depends on | Status |
@@ -172,6 +185,7 @@ Each module, before moving to the next, must ship with:
 | 3 | Diagrams + schema + folder structure + API design a new contributor can build from |
 | 4 | Scaffold builds, tests, lints, and runs in Docker Compose with CI green, zero business logic |
 | 5 (per module) | Implementation + unit + integration + API tests + docs + examples + error handling + logging + validation, no duplicate implementations, CI green |
+| 6 | Security review pass, metrics endpoint + dashboards, load test, `docker compose up` verified for real, `v1.0.0` tagged |
 
 ---
 
