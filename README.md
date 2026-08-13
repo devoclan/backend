@@ -2,7 +2,7 @@
 
 Off-chain backend for the FaniLab logistics-escrow platform. It complements the [FaniLab Soroban smart contracts](../FaniLab-SmartContract) — identity, KYC, dispute evidence, notifications, analytics, fraud detection, and a blockchain event index — without ever custodying funds or duplicating the escrow/delivery/dispute business logic that lives on-chain.
 
-[![CI](https://github.com/fanilab/fanilab-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/fanilab/fanilab-backend/actions/workflows/ci.yml)
+[![CI](https://github.com/fanilabs/backend/actions/workflows/ci.yml/badge.svg)](https://github.com/fanilabs/backend/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 > **Status:** `v1.0.0`. Phase 5 (all twelve modules) and Phase 6 (security review, observability, load test, real `docker compose up` validation) are both complete; see [`ROADMAP.md`](./ROADMAP.md) for the full history and what's next past v1.
