@@ -1,6 +1,6 @@
 # FaniLab Backend — Architecture
 
-**Status:** Phase 3 design output. No business logic is implemented yet — this document is the blueprint Phase 4 (scaffold) and Phase 5 (implementation) build against.
+**Status:** Originally the Phase 3 design output; the blueprint Phase 4 (scaffold) and Phase 5 (implementation) were built against. All twelve modules are now implemented (`v1.0.0`) — see `ROADMAP.md` for current status.
 
 This document assumes familiarity with [`PHASE_1_DOMAIN_ANALYSIS.md`](./PHASE_1_DOMAIN_ANALYSIS.md) (smart contract source of truth) and [`PHASE_2_REFERENCE_ANALYSIS.md`](./PHASE_2_REFERENCE_ANALYSIS.md) (reference-implementation lessons).
 
