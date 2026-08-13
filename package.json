@@ -1,6 +1,6 @@
 {
   "name": "fanilab-backend",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Off-chain backend complementing the FaniLab Soroban logistics-escrow smart contracts.",
   "license": "MIT",
