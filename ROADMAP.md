@@ -111,7 +111,7 @@ Not part of the original task-brief phase gate (§5's Phases 1–5 are) — this
 | M6 | Reputation reconciliation + Notifications live | M5 | ✅ Met |
 | M7 | Analytics + Fraud-detection v1 + Admin module live | M6 | ✅ Met — Phase 5 complete as of this milestone |
 | M8 | Full indexer coverage (all events, all contracts, already true as of M6 — see `EVENT_INDEXER.md`'s "Current Scope"), security review pass, observability dashboards, load test pass | M7 | ✅ Met — Phase 6 |
-| M9 | v1.0.0 tagged release, deployment runbook validated on a real environment | M8 | Pending |
+| M9 | v1.0.0 tagged release, deployment runbook validated on a real environment | M8 | ✅ Met — `v1.0.0` tagged, `docker compose up` validated end-to-end |
 
 ## 7. Risks & Assumptions
 
