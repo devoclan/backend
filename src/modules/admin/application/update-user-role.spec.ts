@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createUpdateUserRoleUseCase } from './update-user-role.js';
-import { AdminUserNotFoundError } from '../domain/index.js';
+import {
+  AdminUserNotFoundError,
+  CannotChangeOwnRoleError,
+  LastAdministratorError,
+} from '../domain/index.js';
 import {
   buildAdminUser,
   createInMemoryAuditLogRepository,
@@ -59,5 +63,80 @@ describe('updateUserRole', () => {
     await expect(
       updateUserRole({ actorId: 'admin-1', userId: 'missing', role: 'ADMIN' }),
     ).rejects.toBeInstanceOf(AdminUserNotFoundError);
+  });
+
+  it('prevents an admin from changing their own role', async () => {
+    const { userRoleRepository, updateUserRole } = setup();
+    const admin = buildAdminUser({ id: 'admin-1', role: 'ADMIN' });
+    userRoleRepository.seed(admin);
+
+    await expect(
+      updateUserRole({ actorId: 'admin-1', userId: 'admin-1', role: 'CUSTOMER' }),
+    ).rejects.toBeInstanceOf(CannotChangeOwnRoleError);
+  });
+
+  it('prevents demoting the only ADMIN', async () => {
+    const { userRoleRepository, updateUserRole } = setup();
+    const onlyAdmin = buildAdminUser({ id: 'admin-1', role: 'ADMIN' });
+    const customer = buildAdminUser({ id: 'user-1', role: 'CUSTOMER' });
+    userRoleRepository.seed(onlyAdmin);
+    userRoleRepository.seed(customer);
+
+    await expect(
+      updateUserRole({ actorId: 'user-1', userId: 'admin-1', role: 'CUSTOMER' }),
+    ).rejects.toBeInstanceOf(LastAdministratorError);
+
+    expect((await userRoleRepository.findById('admin-1'))?.role).toBe('ADMIN');
+  });
+
+  it('allows demoting one admin when another exists', async () => {
+    const { userRoleRepository, updateUserRole } = setup();
+    const admin1 = buildAdminUser({ id: 'admin-1', role: 'ADMIN' });
+    const admin2 = buildAdminUser({ id: 'admin-2', role: 'ADMIN' });
+    userRoleRepository.seed(admin1);
+    userRoleRepository.seed(admin2);
+
+    const result = await updateUserRole({
+      actorId: 'admin-2',
+      userId: 'admin-1',
+      role: 'CUSTOMER',
+    });
+
+    expect(result.role).toBe('CUSTOMER');
+    expect((await userRoleRepository.findById('admin-1'))?.role).toBe('CUSTOMER');
+  });
+
+  it('records audit log for refused self-demotion', async () => {
+    const { userRoleRepository, auditLogRepository, updateUserRole } = setup();
+    const admin = buildAdminUser({ id: 'admin-1', email: 'admin@example.com', role: 'ADMIN' });
+    userRoleRepository.seed(admin);
+
+    try {
+      await updateUserRole({ actorId: 'admin-1', userId: 'admin-1', role: 'CUSTOMER' });
+    } catch {
+      // Expected to throw
+    }
+
+    // Should not record an audit log for refused self-role change
+    expect(auditLogRepository.all()).toHaveLength(0);
+  });
+
+  it('records audit log for refused last admin demotion', async () => {
+    const { userRoleRepository, auditLogRepository, updateUserRole } = setup();
+    const onlyAdmin = buildAdminUser({ id: 'admin-1', email: 'admin@example.com', role: 'ADMIN' });
+    userRoleRepository.seed(onlyAdmin);
+
+    try {
+      await updateUserRole({
+        actorId: 'admin-1',
+        userId: 'admin-1',
+        role: 'CUSTOMER',
+      });
+    } catch {
+      // Expected to throw
+    }
+
+    // Should not record an audit log for refused role change
+    expect(auditLogRepository.all()).toHaveLength(0);
   });
 });

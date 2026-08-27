@@ -38,6 +38,13 @@ export function createInMemoryUserRoleRepository(): UserRoleRepository & {
       if (!existing) return;
       users.set(userId, { ...existing, role });
     },
+    async countByRole(role) {
+      let count = 0;
+      for (const user of users.values()) {
+        if (user.role === role) count++;
+      }
+      return count;
+    },
   };
 }
 
