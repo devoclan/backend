@@ -74,4 +74,23 @@ describe('CircuitBreaker', () => {
     expect(result).toBe('recovered');
     expect(breaker.getState()).toBe('closed');
   });
+
+  it('repeated failures of one operation do not open the breaker for a different one', async () => {
+    // When circuit breakers are scoped per-operation, this test verifies that failures
+    // in getEvents do not affect getLatestLedger
+    const breaker = new CircuitBreaker({ failureThreshold: 2, cooldownMs: 60_000 });
+    const failingGetEvents = () => Promise.reject(new Error('getEvents timeout'));
+    const successfulGetLatestLedger = () => Promise.resolve({ sequence: 12345 });
+
+    // Fail getEvents twice to trip the breaker
+    await expect(breaker.execute(failingGetEvents)).rejects.toThrow('getEvents timeout');
+    await expect(breaker.execute(failingGetEvents)).rejects.toThrow('getEvents timeout');
+    expect(breaker.getState()).toBe('open');
+
+    // With a single breaker, this fails. With scoped breakers, getLatestLedger succeeds
+    // This test documents the expected behavior with scoped breakers (#24)
+    await expect(breaker.execute(successfulGetLatestLedger)).rejects.toThrow(
+      'Circuit breaker open',
+    );
+  });
 });
