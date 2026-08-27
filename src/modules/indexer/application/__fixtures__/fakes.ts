@@ -11,16 +11,26 @@ import type {
 
 export function createInMemoryCheckpointRepository(): CheckpointRepository & {
   seed(checkpoint: Checkpoint): void;
+  getCallCount(): number;
 } {
   const checkpoints = new Map<string, Checkpoint>();
   const key = (contractName: string, network: string): string => `${contractName}:${network}`;
+  let getCallCount = 0;
 
   return {
     seed(checkpoint) {
       checkpoints.set(key(checkpoint.contractName, checkpoint.network), checkpoint);
     },
+    getCallCount() {
+      return getCallCount;
+    },
     async get(contractName, network) {
+      getCallCount++;
       return checkpoints.get(key(contractName, network)) ?? null;
+    },
+    async getMany(contractNames, network) {
+      getCallCount += 1;
+      return contractNames.map((contractName) => checkpoints.get(key(contractName, network)) ?? null);
     },
     async advance(contractName, network, lastLedgerSeq) {
       checkpoints.set(key(contractName, network), {

@@ -106,4 +106,41 @@ describe('getIndexerHealth', () => {
 
     expect(eventSource.getLatestLedgerCallCount()).toBe(1);
   });
+
+  it('queries all tracked contracts with a single database call via getMany', async () => {
+    const checkpointRepository = createInMemoryCheckpointRepository();
+    checkpointRepository.seed({
+      contractName: 'escrow',
+      network: 'testnet',
+      lastLedgerSeq: 950n,
+      updatedAt: new Date(),
+    });
+    checkpointRepository.seed({
+      contractName: 'disputes',
+      network: 'testnet',
+      lastLedgerSeq: 940n,
+      updatedAt: new Date(),
+    });
+    checkpointRepository.seed({
+      contractName: 'fleet',
+      network: 'testnet',
+      lastLedgerSeq: 930n,
+      updatedAt: new Date(),
+    });
+    const eventSource = createFakeEventSource();
+    eventSource.latestLedger = 1000;
+    const getIndexerHealth = createGetIndexerHealthUseCase({ checkpointRepository, eventSource });
+
+    await getIndexerHealth({
+      network: 'testnet',
+      trackedContracts: [
+        { contractName: 'escrow', contractId: 'C_ESCROW' },
+        { contractName: 'disputes', contractId: 'C_DISPUTES' },
+        { contractName: 'fleet', contractId: 'C_FLEET' },
+      ],
+      lagAlertThreshold: 50,
+    });
+
+    expect(checkpointRepository.getCallCount()).toBe(1);
+  });
 });
