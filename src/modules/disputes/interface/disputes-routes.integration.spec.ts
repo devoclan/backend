@@ -242,4 +242,52 @@ describe.skipIf(!dbAvailable)('dispute routes (integration)', () => {
     });
     expect(adminDownload.statusCode).toBe(200);
   });
+
+  it('prevents wallet address transfer from granting access to evidence uploaded by the previous owner', async () => {
+    const chainDeliveryId = await seedDispute();
+    const originalOwner = await registerWithWallet();
+    const attacker = await registerWithWallet();
+
+    const uploadResponse = await app.inject({
+      method: 'POST',
+      url: `/api/v1/disputes/${chainDeliveryId.toString()}/evidence`,
+      headers: { authorization: `Bearer ${originalOwner.accessToken}` },
+      payload: {
+        uploadedBy: originalOwner.address,
+        contentType: 'image/png',
+        base64Content: Buffer.from('sensitive-evidence').toString('base64'),
+      },
+    });
+    expect(uploadResponse.statusCode).toBe(200);
+    const evidenceId = uploadResponse.json<SuccessBody<{ evidenceId: string }>>().data.evidenceId;
+
+    const originalOwnerDownload = await app.inject({
+      method: 'GET',
+      url: `/api/v1/disputes/evidence/${evidenceId}/download`,
+      headers: { authorization: `Bearer ${originalOwner.accessToken}` },
+    });
+    expect(originalOwnerDownload.statusCode).toBe(200);
+
+    await prisma.walletAddress.deleteMany({
+      where: { userId: originalOwner.userId },
+    });
+
+    const attackerRelink = await prisma.walletAddress.create({
+      data: {
+        userId: attacker.userId,
+        address: originalOwner.address,
+        isPrimary: true,
+        verifiedAt: new Date(),
+      },
+    });
+    expect(attackerRelink).toBeTruthy();
+
+    const attackerDownload = await app.inject({
+      method: 'GET',
+      url: `/api/v1/disputes/evidence/${evidenceId}/download`,
+      headers: { authorization: `Bearer ${attacker.accessToken}` },
+    });
+    expect(attackerDownload.statusCode).toBe(403);
+    expect(attackerDownload.json<ErrorBody>().error.code).toBe('FORBIDDEN');
+  });
 });
