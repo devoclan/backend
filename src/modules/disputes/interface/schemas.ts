@@ -69,11 +69,27 @@ export const resolveDisputeSplitFundsBodySchema = z.object({
  * rest of this API — no other module uses multipart) rather than a
  * multipart upload, which keeps this v1 slice's scope to what's already a
  * dependency (Zod + this API's existing JSON envelope) instead of adding a
- * new upload-handling stack. That means it's bounded by Fastify's default
- * 1MB request body limit — fine for photos/documents/short recordings, not
- * for large video evidence. A documented v1 limitation (ROADMAP.md §9 is
- * the place to track it if it needs lifting), not a silent one.
+ * new upload-handling stack.
  */
+export function createUploadEvidenceBodySchema(maxBytes: number) {
+  return z.object({
+    uploadedBy: stellarAddress,
+    contentType: allowedEvidenceContentType,
+    base64Content: z
+      .string()
+      .min(1)
+      .refine(
+        (base64) => {
+          const decodedLength = Math.ceil((base64.length * 3) / 4);
+          return decodedLength <= maxBytes;
+        },
+        {
+          message: `File size exceeds maximum of ${maxBytes} bytes`,
+        },
+      ),
+  });
+}
+
 export const uploadEvidenceBodySchema = z.object({
   uploadedBy: stellarAddress,
   contentType: allowedEvidenceContentType,

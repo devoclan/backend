@@ -288,4 +288,24 @@ describe.skipIf(!dbAvailable)('dispute routes (integration)', () => {
     expect(downloadResponse.headers['content-disposition']).toContain('attachment');
     expect(downloadResponse.headers['content-type']).toBe('image/jpeg');
   });
+
+  it('rejects oversized evidence uploads with validation error', async () => {
+    const chainDeliveryId = await seedDispute();
+    const uploader = await registerWithWallet();
+    const oversizedContent = Buffer.alloc(11_000_000).toString('base64');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/disputes/${chainDeliveryId.toString()}/evidence`,
+      headers: { authorization: `Bearer ${uploader.accessToken}` },
+      payload: {
+        uploadedBy: uploader.address,
+        contentType: 'image/jpeg',
+        base64Content: oversizedContent,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json<ErrorBody>().error.code).toBe('VALIDATION_ERROR');
+  });
 });
