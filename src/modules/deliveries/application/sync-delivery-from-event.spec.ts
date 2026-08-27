@@ -124,4 +124,49 @@ describe('syncDeliveryFromEvent', () => {
       ),
     ).resolves.toBeUndefined();
   });
+
+  it('delivery_created: replayed event with same chainDeliveryId is idempotent', async () => {
+    const { deliveryRepository, contractReader, syncDeliveryFromEvent } = setup();
+    contractReader.seed(7n, buildChainDeliveryRecord({ chainDeliveryId: 7n, origin: 'Nairobi' }));
+
+    await syncDeliveryFromEvent(
+      buildDeliveryEvent({ topic: ['delivery_created'], payload: ['7', 'GSENDER'] }),
+    );
+
+    const firstStored = await deliveryRepository.findByChainId(7n);
+    expect(firstStored?.origin).toBe('Nairobi');
+
+    await syncDeliveryFromEvent(
+      buildDeliveryEvent({ topic: ['delivery_created'], payload: ['7', 'GSENDER'] }),
+    );
+
+    const secondStored = await deliveryRepository.findByChainId(7n);
+    expect(secondStored?.chainDeliveryId).toBe(7n);
+    expect(secondStored?.origin).toBe('Nairobi');
+    expect(await deliveryRepository.list({})).toHaveLength(1);
+  });
+
+  it('delivery_created: replayed event preserves existing driver_assigned status', async () => {
+    const { deliveryRepository, contractReader, syncDeliveryFromEvent } = setup();
+    contractReader.seed(7n, buildChainDeliveryRecord({ chainDeliveryId: 7n, origin: 'Nairobi' }));
+
+    await syncDeliveryFromEvent(
+      buildDeliveryEvent({ topic: ['delivery_created'], payload: ['7', 'GSENDER'] }),
+    );
+    await syncDeliveryFromEvent(
+      buildDeliveryEvent({ topic: ['driver_assigned'], payload: ['7', 'GDRIVER'] }),
+    );
+
+    const afterDriverAssign = await deliveryRepository.findByChainId(7n);
+    expect(afterDriverAssign?.driverAddress).toBe('GDRIVER');
+    expect(afterDriverAssign?.status).toBe('ACTIVE');
+
+    await syncDeliveryFromEvent(
+      buildDeliveryEvent({ topic: ['delivery_created'], payload: ['7', 'GSENDER'] }),
+    );
+
+    const afterReplayed = await deliveryRepository.findByChainId(7n);
+    expect(afterReplayed?.driverAddress).toBe('GDRIVER');
+    expect(afterReplayed?.status).toBe('ACTIVE');
+  });
 });

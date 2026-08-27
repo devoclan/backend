@@ -37,6 +37,15 @@ export function createInMemoryDeliveryRepository(): DeliveryRepository & {
       deliveries.set(key(delivery.chainDeliveryId), delivery);
       return delivery;
     },
+    async upsert(record) {
+      const k = key(record.chainDeliveryId);
+      const existing = deliveries.get(k);
+      const delivery: Delivery = existing
+        ? { ...existing, ...record }
+        : { id: randomUUID(), ...record };
+      deliveries.set(k, delivery);
+      return delivery;
+    },
     async updateStatus(chainDeliveryId, patch) {
       const existing = deliveries.get(key(chainDeliveryId));
       if (!existing) return;
