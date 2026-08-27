@@ -82,4 +82,28 @@ describe('getIndexerHealth', () => {
       healthy: true,
     });
   });
+
+  it('caches getLatestLedger calls within TTL to reduce RPC pressure', async () => {
+    const checkpointRepository = createInMemoryCheckpointRepository();
+    const eventSource = createFakeEventSource();
+    const getIndexerHealth = createGetIndexerHealthUseCase({ checkpointRepository, eventSource });
+
+    await getIndexerHealth({
+      network: 'testnet',
+      trackedContracts: [{ contractName: 'escrow', contractId: 'C_ESCROW' }],
+      lagAlertThreshold: 50,
+    });
+    await getIndexerHealth({
+      network: 'testnet',
+      trackedContracts: [{ contractName: 'escrow', contractId: 'C_ESCROW' }],
+      lagAlertThreshold: 50,
+    });
+    await getIndexerHealth({
+      network: 'testnet',
+      trackedContracts: [{ contractName: 'escrow', contractId: 'C_ESCROW' }],
+      lagAlertThreshold: 50,
+    });
+
+    expect(eventSource.getLatestLedgerCallCount()).toBe(1);
+  });
 });
