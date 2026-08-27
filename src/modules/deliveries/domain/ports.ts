@@ -24,7 +24,7 @@ export interface DeliveryRepository {
   list(filter: DeliveryFilter): Promise<Delivery[]>;
   create(record: ChainDeliveryRecord): Promise<Delivery>;
   upsert(record: ChainDeliveryRecord): Promise<Delivery>;
-  updateStatus(chainDeliveryId: bigint, patch: DeliveryStatusPatch): Promise<void>;
+  updateStatus(chainDeliveryId: bigint, patch: DeliveryStatusPatch): Promise<boolean>;
 }
 
 /**

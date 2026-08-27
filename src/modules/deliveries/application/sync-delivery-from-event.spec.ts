@@ -169,4 +169,31 @@ describe('syncDeliveryFromEvent', () => {
     expect(afterReplayed?.driverAddress).toBe('GDRIVER');
     expect(afterReplayed?.status).toBe('ACTIVE');
   });
+
+  it('status event handler gracefully handles missing parent row via fallback contract read', async () => {
+    const { deliveryRepository, contractReader, syncDeliveryFromEvent } = setup();
+    contractReader.seed(7n, buildChainDeliveryRecord({
+      chainDeliveryId: 7n,
+      origin: 'Nairobi',
+      status: 'IN_TRANSIT',
+    }));
+
+    await syncDeliveryFromEvent(
+      buildDeliveryEvent({ topic: ['delivery_confirmed'], payload: ['7', 'GRECIPIENT'] }),
+    );
+
+    const stored = await deliveryRepository.findByChainId(7n);
+    expect(stored?.chainDeliveryId).toBe(7n);
+    expect(stored?.status).toBe('DELIVERED');
+  });
+
+  it('status events skip gracefully when contract read fails and row missing', async () => {
+    const { syncDeliveryFromEvent } = setup();
+
+    await expect(
+      syncDeliveryFromEvent(
+        buildDeliveryEvent({ topic: ['driver_assigned'], payload: ['9999', 'GDRIVER'] }),
+      ),
+    ).resolves.toBeUndefined();
+  });
 });

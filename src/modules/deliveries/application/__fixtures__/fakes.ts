@@ -48,8 +48,9 @@ export function createInMemoryDeliveryRepository(): DeliveryRepository & {
     },
     async updateStatus(chainDeliveryId, patch) {
       const existing = deliveries.get(key(chainDeliveryId));
-      if (!existing) return;
+      if (!existing) return false;
       deliveries.set(key(chainDeliveryId), { ...existing, ...patch });
+      return true;
     },
   };
 }
