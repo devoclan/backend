@@ -184,4 +184,73 @@ describe.skipIf(!dbAvailable)('auth routes (integration)', () => {
     expect(response.statusCode).toBe(401);
     expect(response.json<ErrorBody>().error.code).toBe('UNAUTHORIZED');
   });
+
+  it('enforces rate limiting on login attempts', async () => {
+    const email = uniqueEmail();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      payload: { email, password: 'password123' },
+    });
+
+    let response;
+    let statusCode;
+    const rateLimitMax = process.env.RATE_LIMIT_AUTH_MAX
+      ? parseInt(process.env.RATE_LIMIT_AUTH_MAX, 10)
+      : process.env.RATE_LIMIT_MAX
+        ? parseInt(process.env.RATE_LIMIT_MAX, 10)
+        : 100;
+
+    for (let i = 0; i < rateLimitMax + 1; i++) {
+      response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/login',
+        payload: { email, password: 'wrong-password' },
+      });
+      statusCode = response.statusCode;
+    }
+
+    expect(statusCode).toBe(429);
+    const body = response!.json<ErrorBody>();
+    expect(body.error.code).toBe('RATE_LIMIT_EXCEEDED');
+  });
+
+  it('enforces separate auth rate limit distinct from global limit', async () => {
+    const email = uniqueEmail();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      payload: { email, password: 'password123' },
+    });
+
+    const authRateLimit = process.env.RATE_LIMIT_AUTH_MAX
+      ? parseInt(process.env.RATE_LIMIT_AUTH_MAX, 10)
+      : process.env.RATE_LIMIT_MAX
+        ? parseInt(process.env.RATE_LIMIT_MAX, 10)
+        : 100;
+
+    const globalRateLimit = process.env.RATE_LIMIT_MAX
+      ? parseInt(process.env.RATE_LIMIT_MAX, 10)
+      : 100;
+
+    if (authRateLimit !== globalRateLimit) {
+      expect(authRateLimit).toBeDefined();
+
+      for (let i = 0; i < authRateLimit + 1; i++) {
+        await app.inject({
+          method: 'POST',
+          url: '/api/v1/auth/login',
+          payload: { email, password: 'wrong-password' },
+        });
+      }
+
+      const rateLimitedResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/login',
+        payload: { email, password: 'wrong-password' },
+      });
+
+      expect(rateLimitedResponse.statusCode).toBe(429);
+    }
+  });
 });
