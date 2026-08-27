@@ -33,20 +33,36 @@ export function createInMemoryCheckpointRepository(): CheckpointRepository & {
   };
 }
 
-export function createInMemoryEventStore(): EventStore & { stored: StoredEvent[] } {
+export function createInMemoryEventStore(): EventStore & {
+  stored: StoredEvent[];
+  processed: Set<string>;
+  failed: Map<string, string>;
+} {
   const stored: StoredEvent[] = [];
   const seen = new Set<string>();
+  const processed = new Set<string>();
+  const failed = new Map<string, string>();
   const key = (event: StoredEvent): string =>
     `${event.contractName}:${event.network}:${event.rpcEventId}`;
 
   return {
     stored,
+    processed,
+    failed,
     async tryInsert(event) {
       const k = key(event);
       if (seen.has(k)) return false;
       seen.add(k);
       stored.push(event);
       return true;
+    },
+    async markProcessed(rpcEventId) {
+      processed.add(rpcEventId);
+      failed.delete(rpcEventId);
+    },
+    async markFailed(rpcEventId, reason) {
+      failed.set(rpcEventId, reason);
+      processed.delete(rpcEventId);
     },
   };
 }
@@ -66,9 +82,11 @@ export function createFakeEventPublisher(): EventPublisher & { published: Stored
 export function createFakeEventSource(): EventSource & {
   latestLedger: number;
   queueResponse(response: FetchEventsResult): void;
+  getOldestRetainedLedger(): Promise<number>;
 } {
   const responses: FetchEventsResult[] = [];
   let latestLedger = 1000;
+  let oldestRetainedLedger = 1;
 
   return {
     get latestLedger() {
@@ -82,6 +100,12 @@ export function createFakeEventSource(): EventSource & {
     },
     async getLatestLedger() {
       return latestLedger;
+    },
+    async getOldestRetainedLedger() {
+      return oldestRetainedLedger;
+    },
+    setOldestRetainedLedger(value: number) {
+      oldestRetainedLedger = value;
     },
     async fetchEvents(_input) {
       const next = responses.shift();
