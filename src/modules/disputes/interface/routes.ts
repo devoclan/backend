@@ -111,7 +111,20 @@ export function createDisputeRoutes(useCases: DisputeUseCases): FastifyPluginAsy
           requesterId: user.id,
           requesterRole: user.role,
         });
-        void reply.status(200).type(contentType).send(bytes);
+        const allowedTypes = [
+          'image/jpeg',
+          'image/png',
+          'image/webp',
+          'application/pdf',
+          'audio/mpeg',
+          'video/mp4',
+        ];
+        const safeContentType = allowedTypes.includes(contentType) ? contentType : 'application/octet-stream';
+        void reply
+          .status(200)
+          .type(safeContentType)
+          .header('Content-Disposition', `attachment; filename="${request.params.evidenceId}"`)
+          .send(bytes);
       },
     );
 

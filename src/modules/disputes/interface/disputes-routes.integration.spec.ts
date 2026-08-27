@@ -242,4 +242,50 @@ describe.skipIf(!dbAvailable)('dispute routes (integration)', () => {
     });
     expect(adminDownload.statusCode).toBe(200);
   });
+
+  it('rejects uploading evidence with disallowed content type', async () => {
+    const chainDeliveryId = await seedDispute();
+    const uploader = await registerWithWallet();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/disputes/${chainDeliveryId.toString()}/evidence`,
+      headers: { authorization: `Bearer ${uploader.accessToken}` },
+      payload: {
+        uploadedBy: uploader.address,
+        contentType: 'text/html',
+        base64Content: Buffer.from('<script>alert("xss")</script>').toString('base64'),
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json<ErrorBody>().error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('includes attachment disposition header on evidence download', async () => {
+    const chainDeliveryId = await seedDispute();
+    const uploader = await registerWithWallet();
+
+    const uploadResponse = await app.inject({
+      method: 'POST',
+      url: `/api/v1/disputes/${chainDeliveryId.toString()}/evidence`,
+      headers: { authorization: `Bearer ${uploader.accessToken}` },
+      payload: {
+        uploadedBy: uploader.address,
+        contentType: 'image/jpeg',
+        base64Content: Buffer.from('fake-jpeg-data').toString('base64'),
+      },
+    });
+    const evidenceId = uploadResponse.json<SuccessBody<{ evidenceId: string }>>().data.evidenceId;
+
+    const downloadResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/disputes/evidence/${evidenceId}/download`,
+      headers: { authorization: `Bearer ${uploader.accessToken}` },
+    });
+
+    expect(downloadResponse.statusCode).toBe(200);
+    expect(downloadResponse.headers['content-disposition']).toContain('attachment');
+    expect(downloadResponse.headers['content-type']).toBe('image/jpeg');
+  });
 });

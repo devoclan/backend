@@ -6,6 +6,16 @@ const chainDeliveryId = z.string().regex(/^\d+$/, 'Must be a non-negative intege
 const evidenceHash = z.string().regex(/^[0-9a-f]{64}$/, 'Must be a 32-byte hex-encoded hash');
 const disputeStatus = z.enum(['OPEN', 'RESOLVED_REFUND', 'RESOLVED_PAYOUT', 'SPLIT']);
 
+const allowedEvidenceContentTypes = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'audio/mpeg',
+  'video/mp4',
+] as const;
+const allowedEvidenceContentType = z.enum(allowedEvidenceContentTypes);
+
 const evidenceDto = z.object({
   id: z.string().uuid(),
   hash: z.string(),
@@ -66,7 +76,7 @@ export const resolveDisputeSplitFundsBodySchema = z.object({
  */
 export const uploadEvidenceBodySchema = z.object({
   uploadedBy: stellarAddress,
-  contentType: z.string().min(1).max(255),
+  contentType: allowedEvidenceContentType,
   base64Content: z.string().min(1),
 });
 
