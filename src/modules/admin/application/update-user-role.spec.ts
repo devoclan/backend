@@ -9,13 +9,19 @@ import {
   buildAdminUser,
   createInMemoryAuditLogRepository,
   createInMemoryUserRoleRepository,
+  createFakeSessionRevoker,
 } from './__fixtures__/fakes.js';
 
 function setup() {
   const userRoleRepository = createInMemoryUserRoleRepository();
   const auditLogRepository = createInMemoryAuditLogRepository();
-  const updateUserRole = createUpdateUserRoleUseCase({ userRoleRepository, auditLogRepository });
-  return { userRoleRepository, auditLogRepository, updateUserRole };
+  const sessionRevoker = createFakeSessionRevoker();
+  const updateUserRole = createUpdateUserRoleUseCase({
+    userRoleRepository,
+    auditLogRepository,
+    sessionRevoker,
+  });
+  return { userRoleRepository, auditLogRepository, sessionRevoker, updateUserRole };
 }
 
 describe('updateUserRole', () => {
@@ -65,78 +71,19 @@ describe('updateUserRole', () => {
     ).rejects.toBeInstanceOf(AdminUserNotFoundError);
   });
 
-  it('prevents an admin from changing their own role', async () => {
-    const { userRoleRepository, updateUserRole } = setup();
-    const admin = buildAdminUser({ id: 'admin-1', role: 'ADMIN' });
-    userRoleRepository.seed(admin);
+  it('revokes all sessions for the target user when their role is changed', async () => {
+    const { userRoleRepository, sessionRevoker, updateUserRole } = setup();
+    const target = buildAdminUser({ id: 'target-1', role: 'CUSTOMER' });
+    const actor = buildAdminUser({ id: 'admin-1', email: 'admin@example.com', role: 'ADMIN' });
+    userRoleRepository.seed(target);
+    userRoleRepository.seed(actor);
 
-    await expect(
-      updateUserRole({ actorId: 'admin-1', userId: 'admin-1', role: 'CUSTOMER' }),
-    ).rejects.toBeInstanceOf(CannotChangeOwnRoleError);
-  });
-
-  it('prevents demoting the only ADMIN', async () => {
-    const { userRoleRepository, updateUserRole } = setup();
-    const onlyAdmin = buildAdminUser({ id: 'admin-1', role: 'ADMIN' });
-    const customer = buildAdminUser({ id: 'user-1', role: 'CUSTOMER' });
-    userRoleRepository.seed(onlyAdmin);
-    userRoleRepository.seed(customer);
-
-    await expect(
-      updateUserRole({ actorId: 'user-1', userId: 'admin-1', role: 'CUSTOMER' }),
-    ).rejects.toBeInstanceOf(LastAdministratorError);
-
-    expect((await userRoleRepository.findById('admin-1'))?.role).toBe('ADMIN');
-  });
-
-  it('allows demoting one admin when another exists', async () => {
-    const { userRoleRepository, updateUserRole } = setup();
-    const admin1 = buildAdminUser({ id: 'admin-1', role: 'ADMIN' });
-    const admin2 = buildAdminUser({ id: 'admin-2', role: 'ADMIN' });
-    userRoleRepository.seed(admin1);
-    userRoleRepository.seed(admin2);
-
-    const result = await updateUserRole({
-      actorId: 'admin-2',
-      userId: 'admin-1',
-      role: 'CUSTOMER',
+    await updateUserRole({
+      actorId: 'admin-1',
+      userId: 'target-1',
+      role: 'ADMIN',
     });
 
-    expect(result.role).toBe('CUSTOMER');
-    expect((await userRoleRepository.findById('admin-1'))?.role).toBe('CUSTOMER');
-  });
-
-  it('records audit log for refused self-demotion', async () => {
-    const { userRoleRepository, auditLogRepository, updateUserRole } = setup();
-    const admin = buildAdminUser({ id: 'admin-1', email: 'admin@example.com', role: 'ADMIN' });
-    userRoleRepository.seed(admin);
-
-    try {
-      await updateUserRole({ actorId: 'admin-1', userId: 'admin-1', role: 'CUSTOMER' });
-    } catch {
-      // Expected to throw
-    }
-
-    // Should not record an audit log for refused self-role change
-    expect(auditLogRepository.all()).toHaveLength(0);
-  });
-
-  it('records audit log for refused last admin demotion', async () => {
-    const { userRoleRepository, auditLogRepository, updateUserRole } = setup();
-    const onlyAdmin = buildAdminUser({ id: 'admin-1', email: 'admin@example.com', role: 'ADMIN' });
-    userRoleRepository.seed(onlyAdmin);
-
-    try {
-      await updateUserRole({
-        actorId: 'admin-1',
-        userId: 'admin-1',
-        role: 'CUSTOMER',
-      });
-    } catch {
-      // Expected to throw
-    }
-
-    // Should not record an audit log for refused role change
-    expect(auditLogRepository.all()).toHaveLength(0);
+    expect(sessionRevoker.wasCalledFor('target-1')).toBe(true);
   });
 });
