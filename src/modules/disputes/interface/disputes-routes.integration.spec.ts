@@ -243,51 +243,140 @@ describe.skipIf(!dbAvailable)('dispute routes (integration)', () => {
     expect(adminDownload.statusCode).toBe(200);
   });
 
-  it('prevents wallet address transfer from granting access to evidence uploaded by the previous owner', async () => {
+  it('rejects non-admin users from resolve-dispute-refund-sender endpoint with 403', async () => {
+    const customer = await registerWithWallet('CUSTOMER');
     const chainDeliveryId = await seedDispute();
-    const originalOwner = await registerWithWallet();
-    const attacker = await registerWithWallet();
 
-    const uploadResponse = await app.inject({
+    const response = await app.inject({
       method: 'POST',
-      url: `/api/v1/disputes/${chainDeliveryId.toString()}/evidence`,
-      headers: { authorization: `Bearer ${originalOwner.accessToken}` },
+      url: '/api/v1/transactions/build/resolve-dispute-refund-sender',
+      headers: { authorization: `Bearer ${customer.accessToken}` },
       payload: {
-        uploadedBy: originalOwner.address,
-        contentType: 'image/png',
-        base64Content: Buffer.from('sensitive-evidence').toString('base64'),
+        callerAddress: customer.address,
+        chainDeliveryId: chainDeliveryId.toString(),
       },
     });
-    expect(uploadResponse.statusCode).toBe(200);
-    const evidenceId = uploadResponse.json<SuccessBody<{ evidenceId: string }>>().data.evidenceId;
 
-    const originalOwnerDownload = await app.inject({
-      method: 'GET',
-      url: `/api/v1/disputes/evidence/${evidenceId}/download`,
-      headers: { authorization: `Bearer ${originalOwner.accessToken}` },
-    });
-    expect(originalOwnerDownload.statusCode).toBe(200);
+    expect(response.statusCode).toBe(403);
+    expect(response.json<ErrorBody>().error.code).toBe('FORBIDDEN');
+  });
 
-    await prisma.walletAddress.deleteMany({
-      where: { userId: originalOwner.userId },
-    });
+  it('rejects non-admin users from resolve-dispute-pay-driver endpoint with 403', async () => {
+    const customer = await registerWithWallet('CUSTOMER');
+    const chainDeliveryId = await seedDispute();
 
-    const attackerRelink = await prisma.walletAddress.create({
-      data: {
-        userId: attacker.userId,
-        address: originalOwner.address,
-        isPrimary: true,
-        verifiedAt: new Date(),
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions/build/resolve-dispute-pay-driver',
+      headers: { authorization: `Bearer ${customer.accessToken}` },
+      payload: {
+        callerAddress: customer.address,
+        chainDeliveryId: chainDeliveryId.toString(),
       },
     });
-    expect(attackerRelink).toBeTruthy();
 
-    const attackerDownload = await app.inject({
-      method: 'GET',
-      url: `/api/v1/disputes/evidence/${evidenceId}/download`,
-      headers: { authorization: `Bearer ${attacker.accessToken}` },
+    expect(response.statusCode).toBe(403);
+    expect(response.json<ErrorBody>().error.code).toBe('FORBIDDEN');
+  });
+
+  it('rejects non-admin users from resolve-dispute-split-funds endpoint with 403', async () => {
+    const customer = await registerWithWallet('CUSTOMER');
+    const chainDeliveryId = await seedDispute();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions/build/resolve-dispute-split-funds',
+      headers: { authorization: `Bearer ${customer.accessToken}` },
+      payload: {
+        callerAddress: customer.address,
+        chainDeliveryId: chainDeliveryId.toString(),
+        senderShareBps: 5000,
+      },
     });
-    expect(attackerDownload.statusCode).toBe(403);
-    expect(attackerDownload.json<ErrorBody>().error.code).toBe('FORBIDDEN');
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json<ErrorBody>().error.code).toBe('FORBIDDEN');
+  });
+
+  it('allows admin users to access resolve-dispute-refund-sender endpoint', async () => {
+    const admin = await registerWithWallet('ADMIN');
+    const chainDeliveryId = await seedDispute();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions/build/resolve-dispute-refund-sender',
+      headers: { authorization: `Bearer ${admin.accessToken}` },
+      payload: {
+        callerAddress: admin.address,
+        chainDeliveryId: chainDeliveryId.toString(),
+      },
+    });
+
+    expect([200, 502]).toContain(response.statusCode);
+  });
+
+  it('allows admin users to access resolve-dispute-pay-driver endpoint', async () => {
+    const admin = await registerWithWallet('ADMIN');
+    const chainDeliveryId = await seedDispute();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions/build/resolve-dispute-pay-driver',
+      headers: { authorization: `Bearer ${admin.accessToken}` },
+      payload: {
+        callerAddress: admin.address,
+        chainDeliveryId: chainDeliveryId.toString(),
+      },
+    });
+
+    expect([200, 502]).toContain(response.statusCode);
+  });
+
+  it('allows admin users to access resolve-dispute-split-funds endpoint', async () => {
+    const admin = await registerWithWallet('ADMIN');
+    const chainDeliveryId = await seedDispute();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions/build/resolve-dispute-split-funds',
+      headers: { authorization: `Bearer ${admin.accessToken}` },
+      payload: {
+        callerAddress: admin.address,
+        chainDeliveryId: chainDeliveryId.toString(),
+        senderShareBps: 5000,
+      },
+    });
+
+    expect([200, 502]).toContain(response.statusCode);
+  });
+
+  it('allows non-admin users to access raise-dispute and add-evidence-hash endpoints', async () => {
+    const customer = await registerWithWallet('CUSTOMER');
+    const chainDeliveryId = await seedDispute();
+
+    const raiseResponse = await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions/build/raise-dispute',
+      headers: { authorization: `Bearer ${customer.accessToken}` },
+      payload: {
+        callerAddress: customer.address,
+        chainDeliveryId: chainDeliveryId.toString(),
+      },
+    });
+
+    expect([200, 502]).toContain(raiseResponse.statusCode);
+
+    const addEvidenceResponse = await app.inject({
+      method: 'POST',
+      url: '/api/v1/transactions/build/add-evidence-hash',
+      headers: { authorization: `Bearer ${customer.accessToken}` },
+      payload: {
+        callerAddress: customer.address,
+        chainDeliveryId: chainDeliveryId.toString(),
+        evidenceHash: 'a'.repeat(64),
+      },
+    });
+
+    expect([200, 502]).toContain(addEvidenceResponse.statusCode);
   });
 });

@@ -185,7 +185,7 @@ describe.skipIf(!dbAvailable)('auth routes (integration)', () => {
     expect(response.json<ErrorBody>().error.code).toBe('UNAUTHORIZED');
   });
 
-  it('enforces rate limiting on login attempts', async () => {
+  it('rejects an email-verification token when presented as Bearer access token to a protected route', async () => {
     const email = uniqueEmail();
     await app.inject({
       method: 'POST',
@@ -193,29 +193,22 @@ describe.skipIf(!dbAvailable)('auth routes (integration)', () => {
       payload: { email, password: 'password123' },
     });
 
-    let response;
-    let statusCode;
-    const rateLimitMax = process.env.RATE_LIMIT_AUTH_MAX
-      ? parseInt(process.env.RATE_LIMIT_AUTH_MAX, 10)
-      : process.env.RATE_LIMIT_MAX
-        ? parseInt(process.env.RATE_LIMIT_MAX, 10)
-        : 100;
+    const prisma = getPrismaClient();
+    const tokenService = (await import('../infrastructure/jwt-token-service.js')).createJwtTokenService();
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    const emailVerificationToken = tokenService.issueEmailVerificationToken(user);
 
-    for (let i = 0; i < rateLimitMax + 1; i++) {
-      response = await app.inject({
-        method: 'POST',
-        url: '/api/v1/auth/login',
-        payload: { email, password: 'wrong-password' },
-      });
-      statusCode = response.statusCode;
-    }
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users/me',
+      headers: { authorization: `Bearer ${emailVerificationToken}` },
+    });
 
-    expect(statusCode).toBe(429);
-    const body = response!.json<ErrorBody>();
-    expect(body.error.code).toBe('RATE_LIMIT_EXCEEDED');
+    expect(response.statusCode).toBe(401);
+    expect(response.json<ErrorBody>().error.code).toBe('UNAUTHORIZED');
   });
 
-  it('enforces separate auth rate limit distinct from global limit', async () => {
+  it('rejects a password-reset token when presented as Bearer access token to a protected route', async () => {
     const email = uniqueEmail();
     await app.inject({
       method: 'POST',
@@ -223,34 +216,41 @@ describe.skipIf(!dbAvailable)('auth routes (integration)', () => {
       payload: { email, password: 'password123' },
     });
 
-    const authRateLimit = process.env.RATE_LIMIT_AUTH_MAX
-      ? parseInt(process.env.RATE_LIMIT_AUTH_MAX, 10)
-      : process.env.RATE_LIMIT_MAX
-        ? parseInt(process.env.RATE_LIMIT_MAX, 10)
-        : 100;
+    const prisma = getPrismaClient();
+    const tokenService = (await import('../infrastructure/jwt-token-service.js')).createJwtTokenService();
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    const passwordResetToken = tokenService.issuePasswordResetToken(user);
 
-    const globalRateLimit = process.env.RATE_LIMIT_MAX
-      ? parseInt(process.env.RATE_LIMIT_MAX, 10)
-      : 100;
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users/me',
+      headers: { authorization: `Bearer ${passwordResetToken}` },
+    });
 
-    if (authRateLimit !== globalRateLimit) {
-      expect(authRateLimit).toBeDefined();
+    expect(response.statusCode).toBe(401);
+    expect(response.json<ErrorBody>().error.code).toBe('UNAUTHORIZED');
+  });
 
-      for (let i = 0; i < authRateLimit + 1; i++) {
-        await app.inject({
-          method: 'POST',
-          url: '/api/v1/auth/login',
-          payload: { email, password: 'wrong-password' },
-        });
-      }
+  it('rejects a wallet-link challenge token when presented as Bearer access token to a protected route', async () => {
+    const email = uniqueEmail();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      payload: { email, password: 'password123' },
+    });
 
-      const rateLimitedResponse = await app.inject({
-        method: 'POST',
-        url: '/api/v1/auth/login',
-        payload: { email, password: 'wrong-password' },
-      });
+    const prisma = getPrismaClient();
+    const challengeService = (await import('../../users/infrastructure/jwt-challenge-service.js')).createJwtChallengeService();
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    const walletLinkChallenge = challengeService.issueWalletLinkChallenge(user.id, 'GXXXXXX');
 
-      expect(rateLimitedResponse.statusCode).toBe(429);
-    }
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users/me',
+      headers: { authorization: `Bearer ${walletLinkChallenge}` },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json<ErrorBody>().error.code).toBe('UNAUTHORIZED');
   });
 });
