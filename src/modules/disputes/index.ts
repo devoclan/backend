@@ -76,5 +76,7 @@ export function createDisputesModule(prisma: PrismaClient): FastifyPluginAsyncZo
     }),
   };
 
-  return createDisputeRoutes(useCases);
+  return createDisputeRoutes(useCases, {
+    evidenceMaxBytes: config.EVIDENCE_MAX_BYTES,
+  });
 }
