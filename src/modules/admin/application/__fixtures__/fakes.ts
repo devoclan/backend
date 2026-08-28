@@ -8,6 +8,10 @@ import type {
   UserRoleRepository,
 } from '../../domain/index.js';
 
+export interface SessionRevoker {
+  revokeAllForUser(userId: string): Promise<void>;
+}
+
 export function createFakeDisputeReviewReader(): DisputeReviewReader & {
   seed(items: DisputeReviewItem[]): void;
 } {
@@ -86,5 +90,25 @@ export function buildAdminUser(overrides: Partial<AdminUser> = {}): AdminUser {
     email: 'user@example.com',
     role: 'CUSTOMER',
     ...overrides,
+  };
+}
+
+export function createFakeSessionRevoker(): SessionRevoker & {
+  wasCalledFor(userId: string): boolean;
+  allRevoked(): string[];
+} {
+  const revokedUserIds: string[] = [];
+  return {
+    wasCalledFor(userId) {
+      return revokedUserIds.includes(userId);
+    },
+    allRevoked() {
+      return revokedUserIds;
+    },
+    async revokeAllForUser(userId) {
+      if (!revokedUserIds.includes(userId)) {
+        revokedUserIds.push(userId);
+      }
+    },
   };
 }
