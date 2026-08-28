@@ -2,6 +2,7 @@ import type { Checkpoint, RawContractEvent, StoredEvent } from './entities.js';
 
 export interface CheckpointRepository {
   get(contractName: string, network: string): Promise<Checkpoint | null>;
+  getMany(contractNames: string[], network: string): Promise<(Checkpoint | null)[]>;
   advance(contractName: string, network: string, lastLedgerSeq: bigint): Promise<void>;
 }
 

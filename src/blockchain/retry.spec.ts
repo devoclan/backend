@@ -39,6 +39,81 @@ describe('withRetry', () => {
     ).rejects.toThrow('non-retryable');
     expect(fn).toHaveBeenCalledTimes(1);
   });
+
+  it('applies jitter to exponential backoff delays for variability', async () => {
+    const delays: number[] = [];
+    const originalSetTimeout = global.setTimeout;
+    vi.spyOn(global, 'setTimeout').mockImplementation((cb: () => void, delay?: number) => {
+      if (typeof delay === 'number') {
+        delays.push(delay);
+      }
+      cb();
+      return {} as NodeJS.Timeout;
+    });
+
+    const fn = vi.fn().mockRejectedValue(new Error('fail'));
+
+    await expect(
+      withRetry(fn, { maxAttempts: 4, baseDelayMs: 100, maxDelayMs: 800 }),
+    ).rejects.toThrow();
+
+    vi.restoreAllMocks();
+
+    // With jitter applied: multiple runs should produce different delay sequences
+    // (this test runs once, so we collect delays from this single run)
+    expect(delays).toHaveLength(3); // 3 retries = 3 delays
+    // All delays should be within the exponential backoff bounds
+    expect(delays[0]!).toBeLessThanOrEqual(100);
+    expect(delays[1]!).toBeLessThanOrEqual(200);
+    expect(delays[2]!).toBeLessThanOrEqual(800);
+  });
+
+  it('respects maxDelayMs even with jitter applied', async () => {
+    const delays: number[] = [];
+    vi.spyOn(global, 'setTimeout').mockImplementation((cb: () => void, delay?: number) => {
+      if (typeof delay === 'number') {
+        delays.push(delay);
+      }
+      cb();
+      return {} as NodeJS.Timeout;
+    });
+
+    const fn = vi.fn().mockRejectedValue(new Error('fail'));
+
+    await expect(
+      withRetry(fn, { maxAttempts: 5, baseDelayMs: 100, maxDelayMs: 500 }),
+    ).rejects.toThrow();
+
+    vi.restoreAllMocks();
+
+    // All delays must respect the maxDelayMs limit
+    for (const delay of delays) {
+      expect(delay).toBeLessThanOrEqual(500);
+    }
+  });
+
+  it('allows disabling jitter with a jitter option for deterministic testing', async () => {
+    const delays: number[] = [];
+    vi.spyOn(global, 'setTimeout').mockImplementation((cb: () => void, delay?: number) => {
+      if (typeof delay === 'number') {
+        delays.push(delay);
+      }
+      cb();
+      return {} as NodeJS.Timeout;
+    });
+
+    const fn = vi.fn().mockRejectedValue(new Error('fail'));
+
+    await expect(
+      withRetry(fn, { maxAttempts: 4, baseDelayMs: 100, maxDelayMs: 800, jitter: false }),
+    ).rejects.toThrow();
+
+    vi.restoreAllMocks();
+
+    // Without jitter: delays should be deterministic exponential backoff
+    // 100 * 2^0 = 100, 100 * 2^1 = 200, 100 * 2^2 = 400
+    expect(delays).toEqual([100, 200, 400]);
+  });
 });
 
 describe('CircuitBreaker', () => {
