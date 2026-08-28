@@ -14,6 +14,8 @@ export interface CheckpointRepository {
  */
 export interface EventStore {
   tryInsert(event: StoredEvent): Promise<boolean>;
+  markProcessed(rpcEventId: string): Promise<void>;
+  markFailed(rpcEventId: string, reason: string): Promise<void>;
 }
 
 export interface FetchEventsResult {
@@ -26,6 +28,7 @@ export interface FetchEventsResult {
 
 export interface EventSource {
   getLatestLedger(): Promise<number>;
+  getOldestRetainedLedger(): Promise<number>;
   fetchEvents(input: { contractId: string; startLedger: number }): Promise<FetchEventsResult>;
 }
 
